@@ -14,6 +14,8 @@ from adabmDCA.fasta import get_tokens, encode_sequence
 from adabmDCA.functional import one_hot
 from adabmDCA.utils import get_mask_save
 
+from multiprocessing import Pool
+
 def import_from_fasta(
     fasta_name: str | Path,
     tokens: str | None = None,
@@ -115,14 +117,17 @@ def sequences_from_file(experiment_id: str, round_id: str, device):
     seq = torch.tensor(sequences, device=device, dtype=torch.int32)
     
     return seq
-    
-def frequences_from_sequences(seq, pseudo_count=0.001, dtype = torch.float32):
-    seq_oh = one_hot(seq, num_classes=4).to(dtype)
+
+def frequences_from_sequences_oh(seq_oh, pseudo_count=0.001):
     fi = adabmDCA.stats.get_freq_single_point(data=seq_oh, pseudo_count=pseudo_count)
     fij = adabmDCA.stats.get_freq_two_points(data=seq_oh, pseudo_count=pseudo_count)
     M = seq_oh.size(0)
     
     return fi, fij, M
+    
+def frequences_from_sequences(seq, pseudo_count=0.001, dtype = torch.float32):
+    seq_oh = one_hot(seq, num_classes=4).to(dtype)
+    return frequences_from_sequences_oh(seq_oh, pseudo_count=pseudo_count)
 
 def frequencies_from_file(experiment_id: str, round_id: str, device, dtype = torch.float32, pseudo_count = 0.001):
     seq = sequences_from_file(experiment_id, round_id, device, dtype)
@@ -529,3 +534,61 @@ def train(
         pbar.close()
         
     return chains, params, history
+
+def compute_logNst(sequences, params):
+    ts = range(len(sequences))
+    sequences_unique, inverse_indices, counts = zip(*[
+        torch.unique(seq_t, dim=0, return_inverse=True, return_counts=True)
+        for seq_t in sequences])
+    sequences_unique_oh = [one_hot(s) for s in sequences_unique]
+
+    params_t = [get_params_at_round(params, t) for t in ts]
+    logNst = [-adabmDCA.statmech.compute_energy(sequences_unique_oh[t], params_t[t])
+                   for t in ts]
+    return logNst, sequences_unique, inverse_indices, counts
+
+# Returns logNst vs logabundances counting each sequence once
+def vectors_for_scatterplot_single_t_unique(logNst, counts, logNst_thresh, inverse_indices):
+    idx_unique_over_thresh = logNst >= logNst_thresh
+    x = logNst[idx_unique_over_thresh]
+    y = torch.log(counts[idx_unique_over_thresh])
+    return x, y
+
+# # Returns logNst vs logabundances counting each sequence once
+# def vectors_for_scatterplot_single_t_unique_countthresh(logNst, counts, count_thresh, inverse_indices):
+#     idx_unique_over_thresh = counts >= count_thresh
+#     x = logNst[idx_unique_over_thresh]
+#     y = torch.log(counts[idx_unique_over_thresh])
+#     return x, y
+
+# Returns logNst vs logabundances counting each sequence as many times as its empirical count
+def vectors_for_scatterplot_single_t_nonunique(logNst, counts, logNst_thresh, inverse_indices):
+    counts_nonunique = counts[inverse_indices]
+    idx_unique_over_thresh = logNst[inverse_indices] >= logNst_thresh
+    x = logNst[inverse_indices][idx_unique_over_thresh]
+    y = torch.log(counts_nonunique[idx_unique_over_thresh])
+    return x, y
+
+def get_params_ps(params):
+    return {"bias": params["bias_ps"], "coupling_matrix": params["couplings_ps"]}
+
+def compute_logps(sequences, params):
+    ts = range(len(sequences))
+    sequences_unique, inverse_indices, counts = zip(*[
+        torch.unique(sequences[t], dim=0, return_inverse=True, return_counts=True)
+        for t in ts])
+    sequences_unique_oh = [one_hot(s) for s in sequences_unique]
+    logps = [-adabmDCA.statmech.compute_energy(sequences_unique_oh[t], params)
+                   for t in ts]
+    return logps
+
+def guess_wildtype_from_sequence_counts(sequences_unique_round_zero, counts_round_zero):
+    amax = counts_round_zero.argmax()
+    wt = sequences_unique_round_zero[amax]
+    return amax, wt
+
+def guess_wildtype_from_site_counts(fi_round_zero):
+    return fi_round_zero.argmax(dim=1)
+
+def hamming(x, y):
+    return (x != y).sum().item()
