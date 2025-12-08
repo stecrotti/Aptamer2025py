@@ -294,7 +294,7 @@ def compute_gradient(
     pi: torch.Tensor,
     pij: torch.Tensor,
     total_reads: torch.Tensor,
-    t: torch.Tensor
+    ts: torch.Tensor
 ) -> Dict[str, torch.Tensor]:
     """Computes the gradient of the log-likelihood of the model using PyTorch.
 
@@ -304,7 +304,7 @@ def compute_gradient(
         pi (torch.Tensor): Single-point frequencies of the chains. (n_rounds x L x q)
         pij (torch.Tensor): Two-point frequencies of the chains. (n_rounds x L x q x q x q)
         total_reads (torch.Tensor): Total number of reads at each round.
-        t (torch.Tensor): Just `range(len(total_reads))`. Needed because doing it inside will result in torchscript complaining
+        ts (torch.Tensor): Just `range(len(total_reads))`. Needed because doing it inside will result in torchscript complaining
 
     Returns:
         Dict[str, torch.Tensor]: Gradient.
@@ -316,8 +316,8 @@ def compute_gradient(
     grad = {}
     W = total_reads.sum()
     grad["bias_Ns0"] = (total_reads[:,None,None] * di).sum(dim=0) / W
-    grad["bias_ps"] = ((t * total_reads)[:,None,None] * di).sum(dim=0) / W
-    grad["couplings_ps"] = ((t * total_reads)[:,None,None,None,None] * dij).sum(dim=0) / W
+    grad["bias_ps"] = ((ts * total_reads)[:,None,None] * di).sum(dim=0) / W
+    grad["couplings_ps"] = ((ts * total_reads)[:,None,None,None,None] * dij).sum(dim=0) / W
     
     return grad
 
@@ -350,10 +350,10 @@ def update_params(
         Dict[str, torch.Tensor]: Updated parameters.
     """
     
-    t = torch.arange(len(total_reads))
+    ts = torch.arange(len(total_reads))
     
     # Compute the gradient
-    grad = compute_gradient(fi=fi, fij=fij, pi=pi, pij=pij, total_reads=total_reads, t=t)
+    grad = compute_gradient(fi=fi, fij=fij, pi=pi, pij=pij, total_reads=total_reads, ts=ts)
     
     # Update parameters
     with torch.no_grad():
@@ -498,7 +498,7 @@ def train(
         for t in range(n_rounds):
             params_t = get_params_at_round(params, t)
             chains[t] = sampler(chains=chains[t], params=params_t, nsweeps=nsweeps)
-        epochs += 1
+        
         
         # Compute the single-point and two-points frequencies of the simulated data
         pi = torch.stack([adabmDCA.stats.get_freq_single_point(data=c) for c in chains])
@@ -518,6 +518,7 @@ def train(
             log_likelihood += total_reads[t] * adabmDCA.statmech.compute_log_likelihood(fi=fi[t], fij=fij[t], params=params_round_t, logZ=logZt)
         log_likelihood /= W
         
+        epochs += 1
         if progress_bar:
             pbar.n = epochs
             pbar.set_description(f"Epochs: {epochs} - Pearson: {pearson:.2f} - LL: {log_likelihood:.2f}")
@@ -592,3 +593,61 @@ def guess_wildtype_from_site_counts(fi_round_zero):
 
 def hamming(x, y):
     return (x != y).sum().item()
+
+def set_zerosum_gauge(params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    """Sets the zero-sum gauge on the coupling matrix and biases.
+    
+    Args:
+        params (Dict[str, torch.Tensor]): Parameters of the model.
+        
+    Returns:
+        Dict[str, torch.Tensor]: New dictionary with modified parameters.
+            "bias": torch.Tensor of shape (L, q)
+            "coupling_matrix": torch.Tensor of shape (L, q, L, q)
+    """
+    params = {key: value.clone() for key, value in params.items()}
+    coupling_matrix = params["coupling_matrix"]
+    coupling_matrix -= coupling_matrix.mean(dim=1, keepdim=True) + \
+                       coupling_matrix.mean(dim=3, keepdim=True) - \
+                       coupling_matrix.mean(dim=(1, 3), keepdim=True)
+    
+    params["coupling_matrix"] = coupling_matrix
+
+    bias = params["bias"]
+    bias -= bias.mean(dim=1, keepdim=True)
+    params["bias"] = bias
+    
+    return params
+
+def get_contact_map(
+    params: Dict[str, torch.Tensor],
+) -> np.ndarray:
+    """
+    Computes the contact map from the model coupling matrix.
+
+    Args:
+        params (Dict[str, torch.Tensor]): Model parameters. Should contain:
+            - "coupling_matrix": torch.Tensor of shape (L, q, L, q)
+            - "bias": torch.Tensor of shape (L, q)
+
+    Returns:
+        np.ndarray: Contact map.
+    """
+    q = params["coupling_matrix"].shape[1]
+    device = params["coupling_matrix"].device
+
+    # Zero-sum gauge  
+    params = set_zerosum_gauge(params)
+       
+    Jij = params["coupling_matrix"]
+
+    # Compute the Frobenius norm
+    cm = torch.sqrt(torch.square(Jij).sum([1, 3]))
+    # Set to zero the diagonal
+    cm = cm - torch.diag(cm.diag())
+    # Compute the average-product corrected Frobenius norm
+    Fapc = cm - torch.outer(cm.sum(1), cm.sum(0)) / cm.sum()
+    # set to zero the diagonal
+    Fapc = Fapc - torch.diag(Fapc.diag())
+
+    return Fapc.cpu().numpy()

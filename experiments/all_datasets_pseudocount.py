@@ -70,7 +70,7 @@ def run_with_pseudocount(experiment_idx, pseudocount):
 
     pc_str = format(pseudocount, '.2f')
     filename = experiment_id + "pseudocount" + pc_str + ".pkl"
-    filepath = "saved/pseudocount/" + experiment_id + filename
+    filepath = "saved/pseudocount/" + filename
     
     data = [experiment_id, round_ids, params, pseudocount, pearson_final]
     
