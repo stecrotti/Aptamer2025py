@@ -3,20 +3,39 @@ from typing import Dict, Tuple, Any
 from tqdm.autonotebook import tqdm
 
 def init_parameters(fi: torch.Tensor) -> Dict[str, torch.Tensor]:
-
-    n_rounds, L, q = fi.shape
+    _, L, q = fi.shape
     params = {}
     params["bias_Ns0"] = torch.log(fi[0])   # initialize with frequencies at first round
-    params["bias_ps"] = torch.zeros((L, q), device=fi.device, dtype=fi.dtype)
+    # params["bias_ps"] = torch.zeros((L, q), device=fi.device, dtype=fi.dtype)
+    params["bias_ps"] = torch.log(fi[-1]) - torch.log(fi[0])
+    # normalize_to_logprob(params["bias_ps"])
     
     return params
 
 def get_params_at_round(params: Dict[str, torch.Tensor], t: int):
     params_t = {}
     bias = params["bias_Ns0"] + t * params["bias_ps"]
-    params_t["bias"] = bias - bias.mean(dim=1, keepdim=True)
+    # params_t["bias"] = bias - bias.logsumexp(dim=1, keepdim=True)
+    # params_t['bias'] = normalize_to_logprob(bias)
+    # params_t["bias"] = bias - bias.mean(dim=1, keepdim=True)
+    params_t["bias"] = bias
     
     return params_t
+
+def get_params_ps(params):
+    return {"bias": params["bias_ps"]}
+
+def compute_energy(
+    x: torch.Tensor,
+    params: Dict[str, torch.Tensor],
+) -> torch.Tensor:
+
+    batch_size = x.shape[0]
+    x_flat = x.view(batch_size, -1)
+    bias_flat = params["bias"].view(-1)
+    energy = - x_flat @ bias_flat
+    
+    return energy
 
 @torch.jit.script
 def compute_gradient_and_loglikelihood(
@@ -30,7 +49,7 @@ def compute_gradient_and_loglikelihood(
     
     grad = {}
     W = total_reads.sum()
-    ll = (total_reads[:,None,None] * fi * pi).sum() / W
+    ll = (total_reads[:,None,None] * fi * pi.log()).sum() / W
     grad["bias_Ns0"] = (total_reads[:,None,None] * di).sum(dim=0) / W
     grad["bias_ps"] = ((ts * total_reads)[:,None,None] * di).sum(dim=0) / W
     
@@ -49,15 +68,26 @@ def update_params(
     ts = torch.arange(len(total_reads))
     
     # Compute the gradient
-    grad, ll = compute_gradient_and_loglikelihood(fi=fi, pi=pi, total_reads=total_reads, ts=ts)
+    grad, ll = compute_gradient_and_loglikelihood(
+        fi=fi, pi=pi, total_reads=total_reads, ts=ts)
     
     # Update parameters
     with torch.no_grad():
         for key in params:
             params[key] += lr * (grad[key] + l2reg * params[key])
-            params[key] -= params[key].mean(dim=1, keepdims=True)
+            # params[key] -= params[key].logsumexp(dim=1, keepdims=True)
     
     return params, ll
+
+def normalize_to_prob(x):
+    assert(len(x.shape) == 2)
+    norm = x.sum(dim=-1, keepdim=True)
+    return x / norm
+
+def normalize_to_logprob(x):
+    assert(len(x.shape) == 2)
+    norm = x.logsumexp(dim=-1, keepdim=True)
+    return x - norm
 
 
 def train(
@@ -70,11 +100,6 @@ def train(
     l2reg: float = 0.0,
     progress_bar: bool = True,
 ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
-    
-    ts = torch.arange(len(total_reads))
-    pi = torch.stack([get_params_at_round(params, t)["bias"].exp() 
-                      for t in ts])
-    _, log_likelihood = compute_gradient_and_loglikelihood(fi=fi, pi=pi, total_reads=total_reads, ts=ts)
 
     history = {
         "epochs": [],
@@ -107,9 +132,11 @@ def train(
     while not halt_condition(epochs, err):
         # Store the previous parameters
         params_prev = {key: value.clone() for key, value in params.items()}
-        
-        pi = torch.stack([get_params_at_round(params, t)["bias"].exp() 
-                      for t in ts])
+        ts = torch.arange(len(total_reads))
+        pi = torch.stack([normalize_to_prob(
+                    get_params_at_round(params, t)["bias"].exp()
+                    )
+                    for t in ts])
         
         # Update the parameters
         params, log_likelihood = update_params(
