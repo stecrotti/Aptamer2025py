@@ -12,7 +12,6 @@ from adabmDCA.statmech import _update_weights_AIS
 from adabmDCA.stats import _get_slope
 from adabmDCA.fasta import get_tokens, encode_sequence
 from adabmDCA.functional import one_hot
-from adabmDCA.utils import get_mask_save
 
 from multiprocessing import Pool
 
@@ -108,7 +107,6 @@ def import_from_fasta(
     
     return out
 
-
 def sequences_from_file(experiment_id: str, round_id: str, device): 
     dirpath = "../../Aptamer2025/data/" + experiment_id
     filepath = dirpath + "/" + experiment_id + round_id + "_merged.fastq_result.fas.gz"
@@ -116,6 +114,27 @@ def sequences_from_file(experiment_id: str, round_id: str, device):
     headers, sequences = import_from_fasta(filepath, tokens=tokens, filter_sequences=False, remove_duplicates=False)
     seq = torch.tensor(sequences, device=device, dtype=torch.int32)
     
+    return seq
+
+def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):         
+    dirpath = "../../Aptamer2025/data/" + experiment_id
+    filepath = dirpath + "/" + experiment_id + "_" + round_id + ".fasta"
+    tokens = "ACGT"
+    headers, sequences = import_from_fasta(filepath, tokens=tokens, filter_sequences=False, remove_duplicates=False)
+
+    def parse_header(headers, s):
+        header = headers[s]
+        parsed = header[3:].split("-")
+        assert(float(parsed[0]) == s)
+        count = int(parsed[1])
+        return count
+
+    counts = [parse_header(headers, s) for s in range(len(headers))]
+    seq = torch.repeat_interleave(
+        torch.tensor(sequences, device=device, dtype=torch.int32), 
+        torch.tensor(counts, device=device, dtype=torch.int32), 
+        dim=0)
+
     return seq
 
 def frequences_from_sequences_oh(seq_oh, pseudo_count=0.001):
@@ -229,8 +248,7 @@ def init_parameters(fi: torch.Tensor) -> Dict[str, torch.Tensor]:
     n_rounds, L, q = fi.shape
     params = {}
     params["bias_Ns0"] = torch.log(fi[0])   # initialize with frequencies at first round
-    # d = torch.log(fi[1]) - torch.log(fi[0])
-    # params["bias_ps"] = d - d.logsumexp(dim=1)[:,None]   # initialize with frequencies at last round
+    params["couplings_Ns0"]  = torch.zeros((L, q, L, q), device=fi.device, dtype=fi.dtype)
     params["bias_ps"] = torch.zeros((L, q), device=fi.device, dtype=fi.dtype)
     params["couplings_ps"] = torch.zeros((L, q, L, q), device=fi.device, dtype=fi.dtype)
     
@@ -249,6 +267,8 @@ def get_params_at_round(params: Dict[str, torch.Tensor], t: int):
     params_t = {}
     params_t["bias"] = params["bias_Ns0"] + t * params["bias_ps"]
     params_t["coupling_matrix"] = t * params["couplings_ps"]
+    if "couplings_Ns0" in params:
+        params_t["coupling_matrix"] += params["couplings_Ns0"]
     
     return params_t
 
@@ -316,6 +336,7 @@ def compute_gradient(
     grad = {}
     W = total_reads.sum()
     grad["bias_Ns0"] = (total_reads[:,None,None] * di).sum(dim=0) / W
+    grad["couplings_Ns0"] = (total_reads[:,None,None,None,None] * dij).sum(dim=0) / W
     grad["bias_ps"] = ((ts * total_reads)[:,None,None] * di).sum(dim=0) / W
     grad["couplings_ps"] = ((ts * total_reads)[:,None,None,None,None] * dij).sum(dim=0) / W
     
@@ -329,7 +350,8 @@ def update_params(
     pij: torch.Tensor,
     total_reads: torch.Tensor,
     params: Dict[str, torch.Tensor],
-    mask: torch.Tensor,
+    mask_ps: torch.Tensor,
+    mask_Ns0: torch.Tensor,
     lr: float,
     l2reg: float = 0.0,
 ) -> Dict[str, torch.Tensor]:
@@ -342,7 +364,7 @@ def update_params(
         pij (torch.Tensor): Two-point frequencies of the chains. (n_rounds x L x q x q x q)
         total_reads (torch.Tensor): Total number of reads at each round.
         params (Dict[str, torch.Tensor]): Parameters of the model (Ns0 and ps), shared among rounds.
-        mask (torch.Tensor): Mask of the interaction graph.
+        mask_ps (torch.Tensor): Mask of the interaction graph for the couplings of ps.
         lr (float): Learning rate.
         l2reg (float): Constant for L2-regularization.
         
@@ -359,7 +381,8 @@ def update_params(
     with torch.no_grad():
         for key in params:
             params[key] += lr * (grad[key] + l2reg * params[key])
-        params["couplings_ps"] *= mask # Remove autocorrelations
+        params["couplings_ps"] *= mask_ps # Remove autocorrelations
+        params["couplings_Ns0"] *= mask_Ns0
     
     return params
 
@@ -379,7 +402,6 @@ def init_history():
 def train(
     sampler: Callable,
     chains: torch.Tensor,
-    mask: torch.Tensor,
     fi: torch.Tensor,
     fij: torch.Tensor,
     total_reads: torch.Tensor,
@@ -388,6 +410,8 @@ def train(
     lr: float,    
     max_epochs: int,
     target_pearson: float,
+    mask_ps: torch.Tensor | None = None,
+    mask_Ns0: torch.Tensor | None = None,
     l2reg: float = 0.0,
     check_slope: bool = False,
     log_weights: torch.Tensor | None = None,
@@ -399,7 +423,6 @@ def train(
     Args:
         sampler (Callable): Sampling function.
         chains (torch.Tensor): Markov chains to sample from the model.
-        mask (torch.Tensor): Mask encoding the sparse graph.
         fi (torch.Tensor): Single-point frequencies of the data. (n_rounds x L x q)
         fij (torch.Tensor): Two-point frequencies of the data. (n_rounds x L x q x q x q)
         params (Dict[str, torch.Tensor]): Parameters of the model (Ns0 and ps), shared among rounds.
@@ -407,6 +430,8 @@ def train(
         lr (float): Learning rate.
         max_epochs (int): Maximum number of gradient updates to be done.
         target_pearson (float): Target Pearson coefficient.
+        mask_ps (torch.Tensor, optional): Mask encoding the sparse graph for ps. Defaults to removing the (i,i) block
+        mask_Ns0 (torch.Tensor, optional): Mask encoding the sparse graph for Ns0. Defaults to all zeros
         l2reg (float, optional): Constant for L2-regularization.
         check_slope (bool, optional): Whether to take into account the slope for the convergence criterion or not. Defaults to False.
         log_weights (torch.Tensor, optional): Log-weights used for the online computation of the log-likelihood. Defaults to None.
@@ -421,6 +446,12 @@ def train(
     dtype = fi.dtype
     n_rounds, L, q = fi.shape
     n_chains = chains.size(1)
+
+    if mask_ps is None:
+        mask_ps = torch.ones(size=(L, q, L, q), dtype=torch.bool, device=device)
+        mask_ps[torch.arange(L), :, torch.arange(L), :] = 0
+    if mask_Ns0 is None:
+        mask_Ns0 = torch.zeros(size=(L, q, L, q), dtype=torch.bool, device=device)
 
     log_likelihood = 0
     W = total_reads.sum()
@@ -447,9 +478,6 @@ def train(
         else:
             c3 = False
         return not c2 * ((not c1) * c3 + c1)
-    
-    # Mask for saving only the upper-diagonal coupling matrix
-    mask_save = get_mask_save(L, q, device=device)
 
     pearson_rounds, _ = zip(*[adabmDCA.stats.get_correlation_two_points(
                                 fij=fij[t], pij=pij[t], fi=fi[t], pi=pi[t]
@@ -483,8 +511,10 @@ def train(
             pij=pij,
             total_reads=total_reads,
             params=params,
-            mask=mask,
-            lr=lr
+            mask_ps=mask_ps,
+            mask_Ns0=mask_Ns0,
+            lr=lr,
+            l2reg=l2reg
         )
 
         # Update Importance Sampling weights
@@ -522,8 +552,6 @@ def train(
         if progress_bar:
             pbar.n = epochs
             pbar.set_description(f"Epochs: {epochs} - Pearson: {pearson:.2f} - LL: {log_likelihood:.2f}")
-            # pbar.n = min(max(0, float(pearson)), target_pearson)
-            # pbar.set_description(f"Epochs: {epochs} - LL: {log_likelihood:.2f}")
         
         history["epochs"].append(epochs)
         history["pearson"].append(pearson)
@@ -549,18 +577,14 @@ def compute_logNst(sequences, params):
     return logNst, sequences_unique, inverse_indices, counts
 
 # Returns logNst vs logabundances counting each sequence once
-def vectors_for_scatterplot_single_t_unique(logNst, counts, logNst_thresh, inverse_indices):
-    idx_unique_over_thresh = logNst >= logNst_thresh
+def vectors_for_scatterplot_single_t_unique(logNst, 
+                                            counts, 
+                                            logNst_thresh=-torch.inf, 
+                                            count_thresh=0):
+    idx_unique_over_thresh = (logNst >= logNst_thresh) * (counts >= count_thresh)
     x = logNst[idx_unique_over_thresh]
     y = torch.log(counts[idx_unique_over_thresh])
     return x, y
-
-# # Returns logNst vs logabundances counting each sequence once
-# def vectors_for_scatterplot_single_t_unique_countthresh(logNst, counts, count_thresh, inverse_indices):
-#     idx_unique_over_thresh = counts >= count_thresh
-#     x = logNst[idx_unique_over_thresh]
-#     y = torch.log(counts[idx_unique_over_thresh])
-#     return x, y
 
 # Returns logNst vs logabundances counting each sequence as many times as its empirical count
 def vectors_for_scatterplot_single_t_nonunique(logNst, counts, logNst_thresh, inverse_indices):
@@ -572,6 +596,9 @@ def vectors_for_scatterplot_single_t_nonunique(logNst, counts, logNst_thresh, in
 
 def get_params_ps(params):
     return {"bias": params["bias_ps"], "coupling_matrix": params["couplings_ps"]}
+
+def get_params_Ns0(params):
+    return {"bias": params["bias_Ns0"], "coupling_matrix": params["couplings_Ns0"]}
 
 def compute_logps(sequences, params):
     ts = range(len(sequences))
@@ -606,21 +633,23 @@ def set_zerosum_gauge(params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor
             "coupling_matrix": torch.Tensor of shape (L, q, L, q)
     """
     params = {key: value.clone() for key, value in params.items()}
-    coupling_matrix = params["coupling_matrix"]
-    coupling_matrix -= coupling_matrix.mean(dim=1, keepdim=True) + \
-                       coupling_matrix.mean(dim=3, keepdim=True) - \
-                       coupling_matrix.mean(dim=(1, 3), keepdim=True)
-    
-    params["coupling_matrix"] = coupling_matrix
 
-    bias = params["bias"]
-    bias -= bias.mean(dim=1, keepdim=True)
-    params["bias"] = bias
+    for key in params:
+        if key.startswith("bias"):
+            bias = params[key]
+            bias -= bias.mean(dim=1, keepdim=True)
+            params[key] = bias
+        elif key.startswith("coupling"): 
+            coupling_matrix = params[key]
+            coupling_matrix -= coupling_matrix.mean(dim=1, keepdim=True) + \
+                            coupling_matrix.mean(dim=3, keepdim=True) - \
+                            coupling_matrix.mean(dim=(1, 3), keepdim=True)
+            params[key] = coupling_matrix
     
     return params
 
 def get_contact_map(
-    params: Dict[str, torch.Tensor],
+    couplings : torch.Tensor,
 ) -> np.ndarray:
     """
     Computes the contact map from the model coupling matrix.
@@ -633,13 +662,10 @@ def get_contact_map(
     Returns:
         np.ndarray: Contact map.
     """
-    q = params["coupling_matrix"].shape[1]
-    device = params["coupling_matrix"].device
-
-    # Zero-sum gauge  
-    params = set_zerosum_gauge(params)
+    q = couplings.shape[1]
+    device = couplings.device
        
-    Jij = params["coupling_matrix"]
+    Jij = couplings
 
     # Compute the Frobenius norm
     cm = torch.sqrt(torch.square(Jij).sum([1, 3]))
