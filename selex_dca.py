@@ -254,21 +254,35 @@ def init_parameters(fi: torch.Tensor) -> Dict[str, torch.Tensor]:
     
     return params
 
-def get_params_at_round(params: Dict[str, torch.Tensor], t: int):
+def get_params_at_round(
+    params: Dict[str, torch.Tensor], 
+    t: int,
+    params_Ns0: Dict[str, torch.Tensor] | None = None):
     """Compute the parameters for the Potts model at round t.
     
     Args:
         params (Dict[str, torch.Tensor]): Parameters of the model (Ns0 and ps), shared among rounds.
-        t (int); the round index
+        t (int): the round index.
+        params_Ns0 (Dict[str, torch.Tensor] | None = None): Optionally, use these parameters for round zero.
         
     Returns:
         Dict[str, torch.Tensor]: Biases and couplings to be MCMC sampled 
     """
+    if params_Ns0 is None:
+        bias_Ns0 = params["bias_Ns0"]
+    else:
+        bias_Ns0 = params_Ns0["bias_Ns0"]
     params_t = {}
-    params_t["bias"] = params["bias_Ns0"] + t * params["bias_ps"]
+    params_t["bias"] = bias_Ns0 + t * params["bias_ps"]
     params_t["coupling_matrix"] = t * params["couplings_ps"]
-    if "couplings_Ns0" in params:
-        params_t["coupling_matrix"] += params["couplings_Ns0"]
+
+    if params_Ns0 is None:
+        if "couplings_Ns0" in params:
+            params_t["coupling_matrix"] += params["couplings_Ns0"]
+    else:
+        if "couplings_Ns0" in params_Ns0:
+            params_t["coupling_matrix"] += params_Ns0["couplings_Ns0"]
+
     
     return params_t
 
@@ -564,17 +578,20 @@ def train(
         
     return chains, params, history
 
-def compute_logNst(sequences, params):
+def compute_logNst(sequences, params, params_Ns0 = None):
+    if params_Ns0 is None:
+        params_Ns0 = params
+
     ts = range(len(sequences))
     sequences_unique, inverse_indices, counts = zip(*[
         torch.unique(seq_t, dim=0, return_inverse=True, return_counts=True)
         for seq_t in sequences])
     sequences_unique_oh = [one_hot(s) for s in sequences_unique]
 
-    params_t = [get_params_at_round(params, t) for t in ts]
+    params_t = [get_params_at_round(params, t, params_Ns0) for t in ts]
     logNst = [-adabmDCA.statmech.compute_energy(sequences_unique_oh[t], params_t[t])
                    for t in ts]
-    return logNst, sequences_unique, inverse_indices, counts
+    return logNst, sequences_unique, sequences_unique_oh, inverse_indices, counts
 
 # Returns logNst vs logabundances counting each sequence once
 def vectors_for_scatterplot_single_t_unique(logNst, 

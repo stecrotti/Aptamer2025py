@@ -11,3 +11,6 @@ __pycache__/
 
 # images
 experiments/img/
+# pixi environments
+.pixi/*
+!.pixi/config.toml

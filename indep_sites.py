@@ -1,23 +1,19 @@
 import torch
 from typing import Dict, Tuple, Any
 from tqdm.autonotebook import tqdm
+from utils import normalize_to_logprob, normalize_to_prob
 
 def init_parameters(fi: torch.Tensor) -> Dict[str, torch.Tensor]:
     _, L, q = fi.shape
     params = {}
     params["bias_Ns0"] = torch.log(fi[0])   # initialize with frequencies at first round
-    # params["bias_ps"] = torch.zeros((L, q), device=fi.device, dtype=fi.dtype)
     params["bias_ps"] = torch.log(fi[-1]) - torch.log(fi[0])
-    # normalize_to_logprob(params["bias_ps"])
     
     return params
 
 def get_params_at_round(params: Dict[str, torch.Tensor], t: int):
     params_t = {}
     bias = params["bias_Ns0"] + t * params["bias_ps"]
-    # params_t["bias"] = bias - bias.logsumexp(dim=1, keepdim=True)
-    # params_t['bias'] = normalize_to_logprob(bias)
-    # params_t["bias"] = bias - bias.mean(dim=1, keepdim=True)
     params_t["bias"] = bias
     
     return params_t
@@ -78,16 +74,6 @@ def update_params(
             # params[key] -= params[key].logsumexp(dim=1, keepdims=True)
     
     return params, ll
-
-def normalize_to_prob(x):
-    assert(len(x.shape) == 2)
-    norm = x.sum(dim=-1, keepdim=True)
-    return x / norm
-
-def normalize_to_logprob(x):
-    assert(len(x.shape) == 2)
-    norm = x.logsumexp(dim=-1, keepdim=True)
-    return x - norm
 
 
 def train(
