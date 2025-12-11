@@ -2,6 +2,7 @@ import torch
 from typing import Dict, Tuple, Any
 from tqdm.autonotebook import tqdm
 from utils import normalize_to_logprob, normalize_to_prob
+from adabmDCA.functional import one_hot
 
 def init_parameters(fi: torch.Tensor) -> Dict[str, torch.Tensor]:
     _, L, q = fi.shape
@@ -11,12 +12,34 @@ def init_parameters(fi: torch.Tensor) -> Dict[str, torch.Tensor]:
     
     return params
 
-def get_params_at_round(params: Dict[str, torch.Tensor], t: int):
+def get_params_at_round(
+    params: Dict[str, torch.Tensor], 
+    t: int,
+    params_Ns0: Dict[str, torch.Tensor] | None = None):
+
+    if params_Ns0 is None:
+        bias_Ns0 = params["bias_Ns0"]
+    else:
+        bias_Ns0 = params_Ns0["bias_Ns0"]
     params_t = {}
-    bias = params["bias_Ns0"] + t * params["bias_ps"]
-    params_t["bias"] = bias
-    
+    params_t["bias"] = bias_Ns0 + t * params["bias_ps"]
+
     return params_t
+
+def compute_logNst(sequences, params, params_Ns0 = None):
+    if params_Ns0 is None:
+        params_Ns0 = params
+
+    ts = range(len(sequences))
+    sequences_unique, inverse_indices, counts = zip(*[
+        torch.unique(seq_t, dim=0, return_inverse=True, return_counts=True)
+        for seq_t in sequences])
+    sequences_unique_oh = [one_hot(s) for s in sequences_unique]
+
+    params_t = [get_params_at_round(params, t, params_Ns0) for t in ts]
+    logNst = [compute_energy(sequences_unique_oh[t], params_t[t])
+                   for t in ts]
+    return logNst, sequences_unique, sequences_unique_oh, inverse_indices, counts
 
 def get_params_ps(params):
     return {"bias": params["bias_ps"]}
