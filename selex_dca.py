@@ -2,156 +2,14 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import adabmDCA
-from Bio import SeqIO
-import gzip
 
 from typing import Dict, Callable, Tuple, List, Any
-from pathlib import Path
 from tqdm.autonotebook import tqdm
 from adabmDCA.statmech import _update_weights_AIS
 from adabmDCA.stats import _get_slope
 from adabmDCA.fasta import get_tokens, encode_sequence
 from adabmDCA.functional import one_hot
 
-from multiprocessing import Pool
-
-def import_from_fasta(
-    fasta_name: str | Path,
-    tokens: str | None = None,
-    filter_sequences: bool = False,
-    remove_duplicates: bool = False,
-    return_mask: bool = False,
-):
-    """Import sequences from a fasta or compressed fasta (.fas.gz) file. The following operations are performed:
-    - If 'tokens' is provided, encodes the sequences in numeric format.
-    - If 'filter_sequences' is True, removes the sequences whose tokens are not present in the alphabet.
-    - If 'remove_duplicates' is True, removes the duplicated sequences.
-    - If 'return_ids' is True, returns also the indices of the original sequences.
-
-    Args:
-        fasta_name (str | Path): Path to the fasta or compressed fasta (.fas.gz) file.
-        tokens (str | None, optional): Alphabet to be used for the encoding. If provided, encodes the sequences in numeric format.
-        filter_sequences (bool, optional): If True, removes the sequences whose tokens are not present in the alphabet. Defaults to False.
-        remove_duplicates (bool, optional): If True, removes the duplicated sequences. Defaults to False.
-        return_ids (bool, optional): If True, returns also the indices of the original sequences. Defaults to False.
-
-    Raises:
-        RuntimeError: The file is not in fasta format.
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray] | Tuple[np.ndarray, np.ndarray, np.ndarray]: Tuple of (headers, sequences) or (headers, sequences, original_ids) if 'return_ids' is True.
-    """
-    # Open the file, handling both .fasta and .fas.gz formats
-    if str(fasta_name).endswith(".gz"):
-        with gzip.open(fasta_name, "rt") as fasta_file: 
-            records = list(SeqIO.parse(fasta_file, "fasta"))
-    else:
-        with open(fasta_name, "r") as fasta_file:
-            records = list(SeqIO.parse(fasta_file, "fasta"))
-
-    # Import headers and sequences
-    sequences = []
-    names = []
-    for record in records:
-        names.append(str(record.id))
-        sequences.append(str(record.seq))
-    
-    # Filter sequences
-    if filter_sequences:
-        if tokens is None:
-            raise ValueError("Argument 'tokens' must be provided if 'filter_sequences' is True.")
-        tokens = get_tokens(tokens)
-        tokens_list = [a for a in tokens]
-        clean_names = []
-        clean_sequences = []
-        clean_mask = []
-        for n, s in zip(names, sequences):
-            if all(c in tokens_list for c in s):
-                if n == "":
-                    n = "unknown_sequence"
-                clean_names.append(n)
-                clean_sequences.append(s)
-                clean_mask.append(True)
-            else:
-                print(f"Unknown token found: removing sequence {n}")
-                clean_mask.append(False)
-        names = np.array(clean_names)
-        sequences = np.array(clean_sequences)
-        mask = np.array(clean_mask)
-        
-    else:
-        names = np.array(names)
-        sequences = np.array(sequences)
-        mask = np.full(len(sequences), True)
-    
-    # Remove duplicates
-    if remove_duplicates:
-        sequences, unique_ids = np.unique(sequences, return_index=True)
-        # sort to preserve the original order
-        order = np.argsort(unique_ids)
-        sequences = sequences[order]
-        names = names[unique_ids[order]]
-        # set to false the mask elements corresponding to the duplicates
-        original_indices_post_filtering = np.where(mask)[0]
-        original_indices_of_unique_items = original_indices_post_filtering[unique_ids]
-        mask_unique = np.full(len(mask), False)
-        mask_unique[original_indices_of_unique_items] = True
-        mask = mask & mask_unique
-        
-    if (tokens is not None) and (len(sequences) > 0):
-        sequences = encode_sequence(sequences, tokens)
-        
-    out = (names, sequences)
-    if return_mask:
-        out = out + (mask,)
-    
-    return out
-
-def sequences_from_file(experiment_id: str, round_id: str, device): 
-    dirpath = "../../Aptamer2025/data/" + experiment_id
-    filepath = dirpath + "/" + experiment_id + round_id + "_merged.fastq_result.fas.gz"
-    tokens = "ACGT"
-    headers, sequences = import_from_fasta(filepath, tokens=tokens, filter_sequences=False, remove_duplicates=False)
-    seq = torch.tensor(sequences, device=device, dtype=torch.int32)
-    
-    return seq
-
-def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):         
-    dirpath = "../../Aptamer2025/data/" + experiment_id
-    filepath = dirpath + "/" + experiment_id + "_" + round_id + ".fasta"
-    tokens = "ACGT"
-    headers, sequences = import_from_fasta(filepath, tokens=tokens, filter_sequences=False, remove_duplicates=False)
-
-    def parse_header(headers, s):
-        header = headers[s]
-        parsed = header[3:].split("-")
-        assert(float(parsed[0]) == s)
-        count = int(parsed[1])
-        return count
-
-    counts = [parse_header(headers, s) for s in range(len(headers))]
-    seq = torch.repeat_interleave(
-        torch.tensor(sequences, device=device, dtype=torch.int32), 
-        torch.tensor(counts, device=device, dtype=torch.int32), 
-        dim=0)
-
-    return seq
-
-def frequences_from_sequences_oh(seq_oh, pseudo_count=0.001):
-    fi = adabmDCA.stats.get_freq_single_point(data=seq_oh, pseudo_count=pseudo_count)
-    fij = adabmDCA.stats.get_freq_two_points(data=seq_oh, pseudo_count=pseudo_count)
-    M = seq_oh.size(0)
-    
-    return fi, fij, M
-    
-def frequences_from_sequences(seq, pseudo_count=0.001, dtype = torch.float32):
-    seq_oh = one_hot(seq, num_classes=4).to(dtype)
-    return frequences_from_sequences_oh(seq_oh, pseudo_count=pseudo_count)
-
-def frequencies_from_file(experiment_id: str, round_id: str, device, dtype = torch.float32, pseudo_count = 0.001):
-    seq = sequences_from_file(experiment_id, round_id, device, dtype)
-    
-    return frequences_from_sequences(seq, pseudo_count=pseudo_count)
 
 def extract_Cij_from_freq(
     fij: torch.Tensor,
@@ -160,7 +18,7 @@ def extract_Cij_from_freq(
     pi: torch.Tensor,
     total_reads: torch.Tensor,
     mask: torch.Tensor | None = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Extracts the lower triangular part of the covariance matrices of the data and chains starting from the frequencies.
 
     Args:
@@ -176,10 +34,6 @@ def extract_Cij_from_freq(
     L = fi.size(-2)
     
     t = torch.arange(len(total_reads))
-#     fi_Ns0 = (total_reads[:,None,None] * fi).sum(dim=0)
-#     fi_Ns0 = fi_Ns0 / fi_Ns0.sum(dim=-1)[:,None]
-#     pi_Ns0 = (total_reads[:,None,None] * pi).sum(dim=0)
-#     pi_Ns0 = pi_Ns0 / pi_Ns0.sum(dim=-1)[:,None]
     fi_ps = ((t * total_reads)[:,None,None] * fi).sum(dim=0)
     fi_ps = fi_ps / fi_ps.sum(dim=-1)[:,None]
     pi_ps = ((t * total_reads)[:,None,None] * pi).sum(dim=0)
