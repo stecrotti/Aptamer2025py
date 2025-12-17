@@ -30,19 +30,23 @@ def run_with_pseudocount(experiment_idx, pseudocount):
     with open(filepath, 'rb') as f:
         fi, fij, total_reads = pickle.load(f)   
   
-    lr = 0.01
-    max_epochs = 10**5
+    max_epochs = 10**4
     
     params=indep_sites.init_parameters(fi)
-    
-    params, history = indep_sites.train(
-        fi=fi,
-        total_reads=total_reads, 
-        params=params,
-        lr=lr,
-        max_epochs=max_epochs,
-        target_error=1e-6,
-        progress_bar=False)
+    history=indep_sites.init_history()
+
+    lrs = torch.logspace(-2, -15, 5)
+
+    for lr in lrs:
+        params, history = indep_sites.train(
+            fi=fi,
+            total_reads=total_reads, 
+            params=params,
+            lr=lr,
+            max_epochs=max_epochs,
+            target_error=1e-16,
+            history=history,
+            progress_bar=False)
 
     filename = experiment_id + "_" + pc_str + ".pkl"
     filepath = "saved/pseudocount/indep_sites/" + filename

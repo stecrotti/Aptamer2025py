@@ -285,7 +285,7 @@ def train(
     log_weights: torch.Tensor | None = None,
     history : Dict[str, List[float]] = init_history(),
     progress_bar: bool = True,
-) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, Any]]:
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, Any]]:
     """Trains the model until the target Pearson correlation is reached or the maximum number of epochs is exceeded.
 
     Args:
@@ -495,7 +495,7 @@ def hamming(x, y):
 
 def get_contact_map(
     couplings : torch.Tensor,
-) -> np.ndarray:
+    ) -> np.ndarray:
     """
     Computes the contact map from the model coupling matrix.
 

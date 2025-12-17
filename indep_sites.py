@@ -1,7 +1,7 @@
 import torch
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, List
 from tqdm.autonotebook import tqdm
-from utils import normalize_to_logprob, normalize_to_prob
+from utils import normalize_to_logprob, normalize_to_prob, set_zerosum_gauge
 from adabmDCA.functional import one_hot
 
 def init_parameters(fi: torch.Tensor) -> Dict[str, torch.Tensor]:
@@ -96,8 +96,17 @@ def update_params(
             params[key] += lr * (grad[key] + l2reg * params[key])
             # params[key] -= params[key].logsumexp(dim=1, keepdims=True)
     
+    # params = set_zerosum_gauge(params)
+
     return params, ll
 
+def init_history():
+    history = {
+        "epochs": [],
+        "log-likelihood": [],
+        "err": []
+    }
+    return history
 
 def train(
     fi: torch.Tensor,
@@ -108,13 +117,8 @@ def train(
     target_error: float = 1e-12,
     l2reg: float = 0.0,
     progress_bar: bool = True,
+    history : Dict[str, List[float]] = init_history(),
 ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
-
-    history = {
-        "epochs": [],
-        "log-likelihood": [],
-        "err": []
-    }
 
     def halt_condition(epochs, err):
         c1 = (epochs > max_epochs)
