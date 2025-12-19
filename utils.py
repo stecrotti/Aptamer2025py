@@ -1,9 +1,13 @@
 from typing import Dict, Callable, Tuple, List, Any
 import torch
+import numpy as np
 from Bio import SeqIO
 import gzip
 from pathlib import Path
 import adabmDCA
+from adabmDCA.functional import one_hot
+from adabmDCA.fasta import get_tokens, encode_sequence
+
 
 def import_from_fasta(
     fasta_name: str | Path,
@@ -142,6 +146,7 @@ def frequencies_from_file(experiment_id: str, round_id: str, device, dtype = tor
     seq = sequences_from_file(experiment_id, round_id, device, dtype)
     
     return frequences_from_sequences(seq, pseudo_count=pseudo_count)
+
 
 
 def normalize_to_prob(x):

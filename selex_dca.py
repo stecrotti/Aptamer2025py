@@ -7,7 +7,6 @@ from typing import Dict, Callable, Tuple, List, Any
 from tqdm.autonotebook import tqdm
 from adabmDCA.statmech import _update_weights_AIS
 from adabmDCA.stats import _get_slope
-from adabmDCA.fasta import get_tokens, encode_sequence
 from adabmDCA.functional import one_hot
 
 
