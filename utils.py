@@ -131,6 +131,36 @@ def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):
 
     return seq
 
+@torch.jit.script
+def get_count_single_point(
+    data: torch.Tensor,
+    pseudo_count: float,
+    ) -> torch.Tensor: 
+    
+    total_count, L, q = data.shape
+    Ri = data.sum(0)
+    Ri_tilde = (1. - pseudo_count) * Ri + pseudo_count * (total_count / q) 
+    return Ri_tilde
+
+@torch.jit.script
+def get_count_two_points(
+    data: torch.Tensor,
+    pseudo_count: float,
+    ) -> torch.Tensor:
+    
+    total_count, L, q = data.shape
+    data_oh = data.reshape(total_count, q * L)
+    
+    Rij = data_oh.T @ data_oh
+    Rij_tilde = (1. - pseudo_count) * Rij + pseudo_count * (total_count / q**2)
+    # Diagonal terms must represent the single point frequencies
+    Rij_diag = get_count_single_point(data, pseudo_count).ravel()
+    # Set the diagonal terms of fij to the single point frequencies
+    Rij_tilde = torch.diagonal_scatter(Rij_tilde, Rij_diag, dim1=0, dim2=1)
+    Rij_tilde = Rij_tilde.reshape(L, q, L, q)
+    
+    return Rij_tilde
+
 def frequences_from_sequences_oh(seq_oh, pseudo_count=0.001):
     fi = adabmDCA.stats.get_freq_single_point(data=seq_oh, pseudo_count=pseudo_count)
     fij = adabmDCA.stats.get_freq_two_points(data=seq_oh, pseudo_count=pseudo_count)
@@ -138,8 +168,9 @@ def frequences_from_sequences_oh(seq_oh, pseudo_count=0.001):
     
     return fi, fij, M
     
-def frequences_from_sequences(seq, pseudo_count=0.001, dtype = torch.float32):
-    seq_oh = one_hot(seq, num_classes=4).to(dtype)
+def frequences_from_sequences(seq, pseudo_count=0.001, dtype = torch.float32,
+                                num_classes=-1):
+    seq_oh = one_hot(seq, num_classes=num_classes).to(dtype)
     return frequences_from_sequences_oh(seq_oh, pseudo_count=pseudo_count)
 
 def frequencies_from_file(experiment_id: str, round_id: str, device, dtype = torch.float32, pseudo_count = 0.001):
@@ -147,6 +178,23 @@ def frequencies_from_file(experiment_id: str, round_id: str, device, dtype = tor
     
     return frequences_from_sequences(seq, pseudo_count=pseudo_count)
 
+def counts_from_sequences_oh(seq_oh, pseudo_count=0.0):
+    Ri = get_count_single_point(data=seq_oh, pseudo_count=pseudo_count)
+    Rij = get_count_two_points(data=seq_oh, pseudo_count=pseudo_count)
+    Rt = seq_oh.size(0)
+    
+    return Ri, Rij, Rt
+    
+def counts_from_sequences(seq, pseudo_count=0.0, dtype = torch.float32, 
+                            num_classes=-1):
+    seq_oh = one_hot(seq, num_classes=num_classes).to(dtype)
+    return counts_from_sequences_oh(seq_oh, pseudo_count=pseudo_count)
+
+def counts_from_file(experiment_id: str, round_id: str, device, 
+                     dtype = torch.float32, pseudo_count = 0.0):
+    seq = sequences_from_file(experiment_id, round_id, device, dtype)
+    
+    return counts_from_sequences(seq, pseudo_count=pseudo_count)
 
 
 def normalize_to_prob(x):
