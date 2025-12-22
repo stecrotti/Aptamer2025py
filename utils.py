@@ -157,16 +157,23 @@ def get_count_two_points(
     Rij_diag = get_count_single_point(data, pseudo_count).ravel()
     # Set the diagonal terms of fij to the single point frequencies
     Rij_tilde = torch.diagonal_scatter(Rij_tilde, Rij_diag, dim1=0, dim2=1)
-    Rij_tilde = Rij_tilde.reshape(L, q, L, q)
-    
-    return Rij_tilde
 
-def frequences_from_sequences_oh(seq_oh, pseudo_count=0.001):
-    fi = adabmDCA.stats.get_freq_single_point(data=seq_oh, pseudo_count=pseudo_count)
-    fij = adabmDCA.stats.get_freq_two_points(data=seq_oh, pseudo_count=pseudo_count)
-    M = seq_oh.size(0)
+    mask = torch.ones(L, q, L, q)
+    mask[torch.arange(L), :, torch.arange(L), :] = 0
+    mask_2d = mask.reshape(L*q, L*q)
+    mask_2d += torch.diag(torch.ones(L*q))
+    Rij_tilde = Rij_tilde * mask_2d
+    Rij_tilde = Rij_tilde.reshape(L, q, L, q)
+
+    return Rij_tilde
     
-    return fi, fij, M
+#     return fi, fij, M
+def frequences_from_sequences_oh(seq_oh, pseudo_count=0.0):
+    Ri, Rij, Rt = counts_from_sequences_oh(seq_oh, pseudo_count=pseudo_count)
+    fi = Ri / Rt
+    fij = Rij / Rt
+    
+    return fi, fij, Rt
     
 def frequences_from_sequences(seq, pseudo_count=0.001, dtype = torch.float32,
                                 num_classes=-1):
@@ -207,6 +214,15 @@ def normalize_to_logprob(x):
     norm = x.logsumexp(dim=-1, keepdim=True)
     return x - norm
 
+def zerosum_gauge_bias(bias):
+    return bias - bias.mean(dim=1, keepdim=True)
+
+def zerosum_gauge_couplings(coupling_matrix):
+    coupling_matrix -= coupling_matrix.mean(dim=1, keepdim=True) + \
+                            coupling_matrix.mean(dim=3, keepdim=True) - \
+                            coupling_matrix.mean(dim=(1, 3), keepdim=True)
+    return coupling_matrix
+
 def set_zerosum_gauge(params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     """Sets the zero-sum gauge on the coupling matrix and biases.
     
@@ -222,14 +238,8 @@ def set_zerosum_gauge(params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor
 
     for key in params:
         if key.startswith("bias"):
-            bias = params[key]
-            bias -= bias.mean(dim=1, keepdim=True)
-            params[key] = bias
+            params[key] = zerosum_gauge_bias(params[key])
         elif key.startswith("coupling"): 
-            coupling_matrix = params[key]
-            coupling_matrix -= coupling_matrix.mean(dim=1, keepdim=True) + \
-                            coupling_matrix.mean(dim=3, keepdim=True) - \
-                            coupling_matrix.mean(dim=(1, 3), keepdim=True)
-            params[key] = coupling_matrix
+            params[key] = zerosum_gauge_couplings(params[key])
     
     return params
