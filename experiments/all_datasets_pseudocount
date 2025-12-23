@@ -4,10 +4,11 @@ declare -a pseudo_counts=(0.00000000 0.00000001 0.00000005 0.00000028 0.00000147
 
 declare -a ns=(0 1 2)
 
-for n in ${!ns[@]}; do
-    for i in ${!pseudo_counts[@]}; do
+for i in ${!pseudo_counts[@]}; do
+    for n in ${!ns[@]}; do
         pixi run python all_datasets_pseudocount.py ${n} ${pseudo_counts[$i]} &
     done
+    wait
 done
 
 wait

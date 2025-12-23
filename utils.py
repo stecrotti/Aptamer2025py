@@ -167,7 +167,7 @@ def get_count_two_points(
 
     return Rij_tilde
     
-#     return fi, fij, M
+    
 def frequences_from_sequences_oh(seq_oh, pseudo_count=0.0):
     Ri, Rij, Rt = counts_from_sequences_oh(seq_oh, pseudo_count=pseudo_count)
     fi = Ri / Rt
