@@ -102,7 +102,8 @@ def init_parameters(fi: torch.Tensor) -> Dict[str, torch.Tensor]:
     params = {}
     params["bias_Ns0"] = torch.log(fi[0])   # initialize with frequencies at first round
     params["couplings_Ns0"]  = torch.zeros((L, q, L, q), device=fi.device, dtype=fi.dtype)
-    params["bias_ps"] = torch.zeros((L, q), device=fi.device, dtype=fi.dtype)
+    # params["bias_ps"] = torch.zeros((L, q), device=fi.device, dtype=fi.dtype)
+    params["bias_ps"] = torch.log(fi[-1])
     params["couplings_ps"] = torch.zeros((L, q, L, q), device=fi.device, dtype=fi.dtype)
     
     return params
