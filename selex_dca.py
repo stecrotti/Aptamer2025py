@@ -67,7 +67,7 @@ def get_correlation_two_points(
     pi: torch.Tensor,
     total_reads: torch.Tensor,
     mask: torch.Tensor | None = None,
-) -> Tuple[float, float]:
+    ) -> Tuple[float, float]:
     """Computes the Pearson coefficient and the slope between the two-point frequencies of data and chains.
 
     Args:
