@@ -101,7 +101,8 @@ def import_from_fasta(
     
     return out
 
-def sequences_from_file(experiment_id: str, round_id: str, device): 
+def sequences_from_file(experiment_id: str, round_id: str, 
+                        device=adabmDCA.utils.get_device("cpu", False)): 
     dirpath = "../../Aptamer2025/data/" + experiment_id
     filepath = dirpath + "/" + experiment_id + round_id + "_merged.fastq_result.fas.gz"
     tokens = "ACGT"
@@ -142,6 +143,14 @@ def get_count_single_point(
     Ri_tilde = (1. - pseudo_count) * Ri + pseudo_count * (total_count / q) 
     return Ri_tilde
 
+def get_freq_single_point(
+    data: torch.Tensor,
+    pseudo_count: float
+    ) -> torch.Tensor: 
+
+    Ri = get_count_single_point(data, pseudo_count)
+    return Ri / Ri.sum(dim=1, keepdim=True)
+
 @torch.jit.script
 def get_count_two_points(
     data: torch.Tensor,
@@ -166,6 +175,14 @@ def get_count_two_points(
     Rij_tilde = Rij_tilde.reshape(L, q, L, q)
 
     return Rij_tilde
+
+def get_freq_two_points(
+    data: torch.Tensor,
+    pseudo_count: float,
+    ) -> torch.Tensor: 
+
+    Rij = get_count_two_points(data, pseudo_count)
+    return Rij / Rij.sum(dim=(1,3), keepdim=True)
     
     
 def frequences_from_sequences_oh(seq_oh, pseudo_count=0.0):

@@ -146,7 +146,7 @@ def init_chains(
     L: int,
     q: int,
     device: torch.device,
-    dtype: torch.dtype = torch.float32,
+    dtype: torch.dtype | None = None,
     fi: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Initialize the chains of the DCA model. If 'fi' is provided, the chains are sampled from the
@@ -158,16 +158,21 @@ def init_chains(
         L (int): Length of the sequences.
         q (int): Number of values that each residue can assume.
         device (torch.device): Device where to store the chains.
-        dtype (torch.dtype, optional): Data type of the chains. Defaults to torch.float32.
+        dtype (torch.dtype, optional): Data type of the chains. Defaults to None, assigned to the type of `fi` or to `torch.float32`.
         fi (torch.Tensor | None, optional): Single-point frequencies. Defaults to None.
 
     Returns:
         torch.Tensor: Initialized parallel chains in one-hot encoding format.
     """
+
     if fi is None:
+        if dtype is None:
+            dtype = torch.float32
         chains = [torch.randint(low=0, high=q, size=(num_chains, L), device=device)
-                  for _ in range(num_rounds)]
+                for _ in range(num_rounds)]
     else:
+        if dtype is None:
+            dtype = fi.dtype
         chains = [torch.multinomial(fi_roundt, num_samples=num_chains, replacement=True).to(device=device).T
              for fi_roundt in fi]
     
