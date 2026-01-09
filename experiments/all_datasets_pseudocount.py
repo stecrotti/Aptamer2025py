@@ -14,7 +14,7 @@ import pickle
 
 def run_with_pseudocount(experiment_idx, pseudocount):
     experiment_ids = ['Dop8V030', 'Dop8V930', 'Dop8V2430'] 
-    max_epochs = [10000, 12000, 10000]
+    max_epochs = [200, 600, 400]
     
     experiment_id = experiment_ids[experiment_idx]
     round_ids = ["ARN", "R01", "R02N"]
@@ -34,7 +34,7 @@ def run_with_pseudocount(experiment_idx, pseudocount):
     sampler_alg = "gibbs"
     sampler = torch.jit.script(get_sampler(sampler_alg))
     
-    nchains = 5*10**4
+    nchains = 10**5
     
     params = selex_dca.init_parameters(fi=fi) # initialize with frequences at last round
     chains = selex_dca.init_chains(num_rounds=n_rounds, num_chains=nchains, L=L, q=q, device=device, fi=fi)
