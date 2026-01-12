@@ -23,7 +23,7 @@ def metropolis_step_uniform_sites(
     delta_energy = energy_new - energy_curr
     accept_prob = torch.exp(- beta * delta_energy).unsqueeze(-1)
     accepted = accept_prob > torch.rand((n_chains, 1), device=device, dtype=dtype)
-    return torch.where(accepted.unsqueeze(-1), chains_new, chains)
+    chains.masked_scatter_(accepted.unsqueeze(-1), chains_new)
     # TODO: use randexp
 
 def sample_metropolis_uniform_sites(
@@ -34,8 +34,7 @@ def sample_metropolis_uniform_sites(
     # random number generator!
 ):
     n_chains, L, q = chains.size()
-    n_steps = n_chains * L
+    n_steps = n_sweeps * L
     with torch.no_grad():
         for step in torch.arange(n_steps):
-            chains = metropolis_step_uniform_sites(chains, compute_energy, beta)
-    return chains
+            metropolis_step_uniform_sites(chains, compute_energy, beta)

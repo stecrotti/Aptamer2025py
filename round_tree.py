@@ -72,6 +72,12 @@ class Tree:
         self.parent = torch.cat((self.parent, torch.IntTensor([parent_node])))
         self.nodename.append(name)
         self.ancestors_flat, self.offset, self.length = store_ancestors(self.parent)  # re-computing everything, not efficient but ok  
+
+    def __eq__(self, other):
+        if type(other) is type(self):
+            return self.__dict__ == other.__dict__
+        return False
+
         
 
 class RoundTree:
@@ -114,3 +120,6 @@ class RoundTree:
 
     def get_n_modes(self):
         return self.n_modes
+    
+    def get_n_rounds(self):
+        return self.tree.get_n_nodes()
