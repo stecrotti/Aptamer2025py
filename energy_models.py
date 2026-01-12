@@ -1,5 +1,5 @@
 import torch
-from model import EnergyModel
+from selex_distribution import EnergyModel
 
 class IndepSites(EnergyModel):
     def __init__(

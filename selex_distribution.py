@@ -67,3 +67,6 @@ class MultiRoundDistribution(torch.nn.Module):
          logNs0 = - self.round_zero.compute_energy(x)
          logps = - self.selection_energy_up_to_round(x, t)
          return - (logps + logNs0)
+
+     def get_n_rounds(self):
+         return self.round_tree.get_n_rounds()

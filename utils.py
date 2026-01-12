@@ -7,6 +7,7 @@ from pathlib import Path
 import adabmDCA
 from adabmDCA.functional import one_hot
 from adabmDCA.fasta import get_tokens, encode_sequence
+import os
 
 
 def import_from_fasta(
@@ -103,8 +104,8 @@ def import_from_fasta(
 
 def sequences_from_file(experiment_id: str, round_id: str, 
                         device=adabmDCA.utils.get_device("cpu", False)): 
-    dirpath = "../../Aptamer2025/data/" + experiment_id
-    filepath = dirpath + "/" + experiment_id + round_id + "_merged.fastq_result.fas.gz"
+    dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()
+    filepath = dirpath / (experiment_id + round_id + "_merged.fastq_result.fas.gz")
     tokens = "ACGT"
     headers, sequences = import_from_fasta(filepath, tokens=tokens, filter_sequences=False, remove_duplicates=False)
     seq = torch.tensor(sequences, device=device, dtype=torch.int32)
@@ -112,8 +113,8 @@ def sequences_from_file(experiment_id: str, round_id: str,
     return seq
 
 def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):         
-    dirpath = "../../Aptamer2025/data/" + experiment_id
-    filepath = dirpath + "/" + experiment_id + "_" + round_id + ".fasta"
+    dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()   
+    filepath = dirpath / (experiment_id + "_" + round_id + ".fasta")
     tokens = "ACGT"
     headers, sequences = import_from_fasta(filepath, tokens=tokens, filter_sequences=False, remove_duplicates=False)
 
