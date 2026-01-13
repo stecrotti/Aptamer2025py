@@ -33,8 +33,7 @@ def sample_metropolis_uniform_sites(
     beta: float = 1.0,
     # random number generator!
 ):
-    n_chains, L, q = chains.size()
+    L = chains.size(1)
     n_steps = n_sweeps * L
-    with torch.no_grad():
-        for step in torch.arange(n_steps):
-            metropolis_step_uniform_sites(chains, compute_energy, beta)
+    for step in torch.arange(n_steps):
+        metropolis_step_uniform_sites(chains, compute_energy, beta)
