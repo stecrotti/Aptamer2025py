@@ -86,12 +86,15 @@ class Potts(EnergyModel):
         return self.compute_energy(x)
 
     def set_zerosum_gauge(self):
-        h = self.h
-        self.h = h - h.mean(dim=1, keepdim=True)
+        self.h = self.h - self.h.mean(dim=1, keepdim=True)
+
         J = self.J
-        self.J -= J.mean(dim=1, keepdim=True) + \
-                    J.mean(dim=3, keepdim=True) - \
-                    J.mean(dim=(1, 3), keepdim=True) 
+        J_new = J - (
+            J.mean(dim=1, keepdim=True)
+            + J.mean(dim=3, keepdim=True)
+            - J.mean(dim=(1, 3), keepdim=True)
+        )
+        self.J = J_new
         
 # used as dummy for checks
 class InfiniteEnergy(EnergyModel):
