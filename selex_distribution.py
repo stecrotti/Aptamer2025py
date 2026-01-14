@@ -26,10 +26,6 @@ class MultiModeDistribution(torch.nn.Module):
         self,
         x: torch.Tensor,  # batch_size * L * q
     ) -> torch.Tensor: # batch_size * n_modes
-        # minusE = torch.Tensor()
-        # for mode in self.modes:
-        #     minusEw = - mode.compute_energy(x)
-        #     minusE = torch.cat((minusE, minusEw[:,None]), dim=1)
         minusE = torch.stack(
             [-mode.compute_energy(x) for mode in self.modes],
             dim=1

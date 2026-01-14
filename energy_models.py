@@ -33,9 +33,11 @@ class IndepSites(EnergyModel):
 
     def forward(self, x):
         return self.compute_energy(x)
-
+    
     def set_zerosum_gauge(self):
-        self.h = self.h - self.h.mean(dim=1, keepdim=True)
+        h = self.h.clone()
+        h = h - h.mean(dim=1, keepdim=True)
+        return IndepSites(h)
 
 class Potts(EnergyModel):
     def __init__(
@@ -57,10 +59,10 @@ class Potts(EnergyModel):
 
         L, q = sz_h
         mask = torch.ones(L, q, L, q)
-        mask[torch.arange(L), :, torch.arange(L), :] = 0
         # set the (i,i) blocks to zero
-        J = J * mask
+        mask[torch.arange(L), :, torch.arange(L), :] = 0
         self.J = torch.nn.Parameter(J)
+        self.mask = mask
 
     def get_n_states(self):
         return self.h.size(1)
@@ -77,7 +79,7 @@ class Potts(EnergyModel):
         # the -1 accounts for possible batch index along dimension 0
         x_flat = x.view(-1, L * q)
         bias_flat = self.h.view(L * q)
-        couplings_flat = self.J.reshape(L * q, L * q)
+        couplings_flat = (self.J * self.mask).reshape(L * q, L * q)
         bias_term = x_flat @ bias_flat
         coupling_term = torch.sum(x_flat * (x_flat @ couplings_flat), dim=1)
         return - bias_term - 0.5 * coupling_term
@@ -86,15 +88,17 @@ class Potts(EnergyModel):
         return self.compute_energy(x)
 
     def set_zerosum_gauge(self):
-        self.h = self.h - self.h.mean(dim=1, keepdim=True)
+        h = self.h.detach().clone()
+        h = h - h.mean(dim=1, keepdim=True)
 
-        J = self.J
-        J_new = J - (
+        J = self.J.detach() * self.mask.detach()
+        J = J - (
             J.mean(dim=1, keepdim=True)
             + J.mean(dim=3, keepdim=True)
             - J.mean(dim=(1, 3), keepdim=True)
         )
-        self.J = J_new
+
+        return Potts(J, h)
         
 # used as dummy for checks
 class InfiniteEnergy(EnergyModel):

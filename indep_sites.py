@@ -139,7 +139,7 @@ def train(
             ascii="-#",
             bar_format="{desc} {percentage:.2f}%[{bar}] Epoch: {n}/{total_fmt} [{elapsed}]"
         )
-        pbar.set_description(f"Epochs: {epochs} - LL: {log_likelihood:.2f}")
+        pbar.set_description(f"Epochs: {epochs}")
     
 
     while not halt_condition(epochs, err):
