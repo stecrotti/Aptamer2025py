@@ -13,7 +13,6 @@ def metropolis_step_uniform_sites(
     dtype = chains.dtype
     n_chains, L, q = chains.shape
     idx = torch.randint(0, L, (1,), device=chains.device)[0]
-    res_curr = chains[:, idx, :]
     # Propose a random new residue
     res_new = one_hot(torch.randint(0, q, (n_chains,), device=chains.device), num_classes=q).to(dtype)
     chains_new = chains.clone()
