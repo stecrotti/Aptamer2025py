@@ -38,13 +38,13 @@ class MultiModeDistribution(torch.nn.Module):
     
 
 class MultiRoundDistribution(torch.nn.Module):
-     def __init__(
+    def __init__(
         self,
         round_zero: EnergyModel,
         selection: MultiModeDistribution,
         tree: Tree,
         selected_modes: torch.BoolTensor,   # (n_rounds * n_modes) modes selected for at each round
-     ):
+    ):
         if selection.get_n_modes() != selected_modes.size(1):
             raise ValueError(f"Number of modes must coincide for selection probability, got {selection.get_n_modes()} and {selected_modes.size(1)}")
         super().__init__()
@@ -53,37 +53,37 @@ class MultiRoundDistribution(torch.nn.Module):
         self.tree = tree
         self.selected_modes = selected_modes
 
-     def _selection_energy(self, x, t_or_ts):
+    def _selection_energy(self, x, t_or_ts):
         logps_modes = self.selection.compute_logprobabilities(x)
         selected = self.selected_modes[t_or_ts].clone()
         # first pick only the selected rounds, then (log)sum(exp) over modes, then sum over rounds
         return - (logps_modes[:,None,:] + torch.log(selected)).logsumexp(dim=-1).sum(-1)
-     
-     def selection_energy_at_round(self, x, t):
+
+    def selection_energy_at_round(self, x, t):
         if t == -1:
             return torch.zeros(x.size(0))
         return self._selection_energy(x, t)
 
-     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau}
-     def selection_energy_up_to_round(self, x, t):
+    # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau}
+    def selection_energy_up_to_round(self, x, t):
         if t == -1:
             return torch.zeros(x.size(0))
         ancestors = self.tree.ancestors_of(t)
         return self._selection_energy(x, ancestors)
 
-     # compute sum_tau log p_{s,tau}
+    # compute sum_tau log p_{s,tau}
     #  @torch.compile
-     def compute_energy_up_to_round(self, x, t):
-         if t == -2:
+    def compute_energy_up_to_round(self, x, t):
+        if t == -2:
             return torch.zeros(x.size(0))
-         logNs0 = - self.round_zero.compute_energy(x)
-         logps = - self.selection_energy_up_to_round(x, t)
-         return - (logps + logNs0)
-     
-    #  @torch.compile
-     def compute_energy_up_to_parent_round(self, x, t):
-         at = self.tree.parent[t]
-         return self.compute_energy_up_to_round(x, at)
+        logNs0 = - self.round_zero.compute_energy(x)
+        logps = - self.selection_energy_up_to_round(x, t)
+        return - (logps + logNs0)
 
-     def get_n_rounds(self):
-         return self.tree.get_n_nodes()()
+    #  @torch.compile
+    def compute_energy_up_to_parent_round(self, x, t):
+        at = self.tree.parent[t]
+        return self.compute_energy_up_to_round(x, at)
+
+    def get_n_rounds(self):
+        return self.tree.get_n_nodes()()
