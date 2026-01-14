@@ -1,7 +1,7 @@
 import torch
 from adabmDCA.functional import one_hot
 
-@torch.compile
+# @torch.compile
 def metropolis_step_uniform_sites(
     chains: torch.Tensor,
     compute_energy,
