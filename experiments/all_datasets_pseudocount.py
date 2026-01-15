@@ -13,7 +13,7 @@ import pickle
 
 def run_with_pseudocount(experiment_idx, pseudocount):
     experiment_ids = ['Dop8V030', 'Dop8V930', 'Dop8V2430'] 
-    max_epochs = [200, 600, 400]
+    max_epochs = [300, 600, 500]
     
     experiment_id = experiment_ids[experiment_idx]
     round_ids = ["ARN", "R01", "R02N"]

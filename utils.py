@@ -5,7 +5,6 @@ from Bio import SeqIO
 import gzip
 from pathlib import Path
 import adabmDCA
-# from adabmDCA.functional import one_hot
 from adabmDCA.fasta import get_tokens, encode_sequence
 
 

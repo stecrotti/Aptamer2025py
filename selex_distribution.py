@@ -6,6 +6,32 @@ class EnergyModel(Module):
     def __init__(self):
         super().__init__()
     
+# class SelectionDistribution(torch.nn.Module):
+#     def __init__():
+#         super().__init__()
+
+# class SingleModeDistribution(torch.nn.Module):
+#     def __init__(
+#         self,
+#         mode: EnergyModel
+#     ):
+#         super().__init__()
+#         self.mode = mode
+
+#     def compute_energy(
+#         self,
+#         x: torch.Tensor, # batch_size * L * q
+#         selected: torch.BoolTensor, # n_rounds * n_modes
+#     ):
+#         minus_en = torch.stack(
+#             [mode.compute_energy(x) for mode in self.modes],
+#             dim=1
+#         )
+#         if self.normalized == True:
+#             minus_en = minus_en - minus_en.logsumexp(dim=1, keepdim=True)
+
+#         # first pick only the selected rounds, then (log)sum(exp) over modes, then sum over rounds
+#         return -(-minus_en[:,None,:] + torch.log(selected)).logsumexp(dim=-1).sum(-1)
 
 class MultiModeDistribution(torch.nn.Module):
     def __init__(
@@ -54,24 +80,18 @@ class MultiRoundDistribution(torch.nn.Module):
         self.tree = tree
         self.selected_modes = selected_modes
 
-    # def _selection_energy(self, x, t_or_ts):
-    #     logps_modes = self.selection.compute_logprobabilities(x)
-    #     selected = self.selected_modes[t_or_ts].clone()
-    #     # first pick only the selected rounds, then (log)sum(exp) over modes, then sum over rounds
-    #     return - (logps_modes[:,None,:] + torch.log(selected)).logsumexp(dim=-1).sum(-1)
-
     # compute $\log p_{st}
     def selection_energy_at_round(self, x, t):
         if t == -1:
             return torch.zeros(x.size(0))
-        return self.selection.compute_energy(x, self.selected_modes[t])
+        return self.selection.compute_energy(x, selected=self.selected_modes[t])
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau}
     def selection_energy_up_to_round(self, x, t):
         if t == -1:
             return torch.zeros(x.size(0))
         ancestors = self.tree.ancestors_of(t)
-        return self.selection.compute_energy(x, self.selected_modes[ancestors])
+        return self.selection.compute_energy(x, selected=self.selected_modes[ancestors])
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau} + logNs0
     def compute_energy_up_to_round(self, x, t):
