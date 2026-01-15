@@ -1,5 +1,5 @@
 import torch
-from adabmDCA.functional import one_hot
+import utils
 
 # @torch.compile
 def metropolis_step_uniform_sites(
@@ -14,7 +14,7 @@ def metropolis_step_uniform_sites(
     n_chains, L, q = chains.shape
     idx = torch.randint(0, L, (1,), device=chains.device)[0]
     # Propose a random new residue
-    res_new = one_hot(torch.randint(0, q, (n_chains,), device=chains.device), num_classes=q).to(dtype)
+    res_new = utils.one_hot(torch.randint(0, q, (n_chains,), device=chains.device), num_classes=q).to(dtype)
     chains_new = chains.clone()
     idx_expanded = idx.view(1, 1, 1).expand(n_chains, 1, q)
     chains_new.scatter_(1, idx_expanded, res_new.unsqueeze(1))
