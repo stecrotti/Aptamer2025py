@@ -35,7 +35,7 @@ class IndepSites(EnergyModel):
         return self.compute_energy(x)
     
     def set_zerosum_gauge(self):
-        h = self.h.clone()
+        h = self.h.detach().clone()
         h = h - h.mean(dim=1, keepdim=True)
         return IndepSites(h)
 

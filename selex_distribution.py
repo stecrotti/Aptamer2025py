@@ -80,4 +80,4 @@ class MultiRoundDistribution(torch.nn.Module):
         return self.compute_energy_up_to_round(x, at)
 
     def get_n_rounds(self):
-        return self.tree.get_n_nodes()()
+        return self.tree.get_n_nodes()
