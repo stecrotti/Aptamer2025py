@@ -1,9 +1,8 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-import adabmDCA
 
-from adabmDCA.utils import get_device, get_dtype, get_mask_save
+from adabmDCA.utils import get_device, get_dtype
 from adabmDCA.sampling import get_sampler
 
 import sys
@@ -14,7 +13,7 @@ import pickle
 
 def run_with_pseudocount(experiment_idx, pseudocount):
     experiment_ids = ['Dop8V030', 'Dop8V930', 'Dop8V2430'] 
-    max_epochs = [200, 600, 400]
+    max_epochs = [300, 600, 500]
     
     experiment_id = experiment_ids[experiment_idx]
     round_ids = ["ARN", "R01", "R02N"]
@@ -61,12 +60,12 @@ def run_with_pseudocount(experiment_idx, pseudocount):
         progress_bar=True
         )
 
-    pearson_final = history["pearson"][-1]
+    pearson = history["pearson"]
 
     filename = experiment_id + "_" + pc_str + ".pkl"
-    filepath = "saved/pseudocount/" + filename
+    filepath = "saved/large_pseudocount/" + filename
     
-    data = [experiment_id, round_ids, params, pseudocount, pearson_final]
+    data = [experiment_id, round_ids, params, pseudocount, pearson]
     
     with open(filepath, 'wb') as f:
         pickle.dump(data, f)

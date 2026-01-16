@@ -5,8 +5,52 @@ from Bio import SeqIO
 import gzip
 from pathlib import Path
 import adabmDCA
-from adabmDCA.functional import one_hot
 from adabmDCA.fasta import get_tokens, encode_sequence
+
+
+def _one_hot(x: torch.Tensor, num_classes: int = -1, dtype: torch.dtype = torch.float32) -> torch.Tensor:
+   
+    if x.dim() not in (1, 2):
+        raise ValueError("Input tensor x must be 1D or 2D")
+    
+    if num_classes < 0:
+        num_classes = int(x.max() + 1)
+    
+    # Handle 1D case (single sequence)
+    if x.dim() == 1:
+        res = torch.zeros(x.shape[0], num_classes, device=x.device, dtype=dtype)
+        index = (torch.arange(x.shape[0], device=x.device), x)
+        values = torch.ones(x.shape[0], device=x.device, dtype=dtype)
+        res.index_put_(index, values)
+        return res
+    
+    # Handle 2D case (batch of sequences)
+    res = torch.zeros(x.shape[0], x.shape[1], num_classes, device=x.device, dtype=dtype)
+    tmp = torch.meshgrid(
+        torch.arange(x.shape[0], device=x.device),
+        torch.arange(x.shape[1], device=x.device),
+        indexing="ij",
+    )
+    index = (tmp[0], tmp[1], x)
+    values = torch.ones(x.shape[0], x.shape[1], device=x.device, dtype=dtype)
+    res.index_put_(index, values)
+    
+    return res
+
+
+def one_hot(x: torch.Tensor, num_classes: int = -1, dtype: torch.dtype = torch.float32) -> torch.Tensor:
+    """A fast one-hot encoding function faster than the PyTorch one working with torch.int32 and returning a float Tensor.
+    Works for both 1D (single sequence) and 2D (batch of sequences) tensors.
+    
+    Args:
+        x (torch.Tensor): Input tensor to be one-hot encoded. Shape (L,) or (batch_size, L).
+        num_classes (int, optional): Number of classes. If -1, the number of classes is inferred from the input tensor. Defaults to -1.
+        dtype (torch.dtype, optional): Data type of the output tensor. Defaults to torch.float32.
+        
+    Returns:
+        torch.Tensor: One-hot encoded tensor. Shape (L, num_classes) for 1D input or (batch_size, L, num_classes) for 2D input.
+    """
+    return _one_hot(x, num_classes, dtype)
 
 
 def import_from_fasta(
@@ -103,8 +147,8 @@ def import_from_fasta(
 
 def sequences_from_file(experiment_id: str, round_id: str, 
                         device=adabmDCA.utils.get_device("cpu", False)): 
-    dirpath = "../../Aptamer2025/data/" + experiment_id
-    filepath = dirpath + "/" + experiment_id + round_id + "_merged.fastq_result.fas.gz"
+    dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()
+    filepath = dirpath / (experiment_id + round_id + "_merged.fastq_result.fas.gz")
     tokens = "ACGT"
     headers, sequences = import_from_fasta(filepath, tokens=tokens, filter_sequences=False, remove_duplicates=False)
     seq = torch.tensor(sequences, device=device, dtype=torch.int32)
@@ -112,8 +156,8 @@ def sequences_from_file(experiment_id: str, round_id: str,
     return seq
 
 def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):         
-    dirpath = "../../Aptamer2025/data/" + experiment_id
-    filepath = dirpath + "/" + experiment_id + "_" + round_id + ".fasta"
+    dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()   
+    filepath = dirpath / (experiment_id + "_" + round_id + ".fasta")
     tokens = "ACGT"
     headers, sequences = import_from_fasta(filepath, tokens=tokens, filter_sequences=False, remove_duplicates=False)
 
