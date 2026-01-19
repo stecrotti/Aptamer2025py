@@ -55,29 +55,29 @@ class MultiRoundDistribution(torch.nn.Module):
 
     # compute $\log p_{st}
     def selection_energy_at_round(self, x, t):
-        if t == -1:
+        if t == 0:
             return torch.zeros(x.size(0))
-        return self.selection.compute_energy(x, selected=self.selected_modes[t])
+        return self.selection.compute_energy(x, selected=self.selected_modes[t-1])
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau}
     def selection_energy_up_to_round(self, x, t):
-        if t == -1:
+        if t == 0:
             return torch.zeros(x.size(0))
-        ancestors = self.tree.ancestors_of(t)
+        ancestors = self.tree.ancestors_of(t-1)
         return self.selection.compute_energy(x, selected=self.selected_modes[ancestors])
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau} + logNs0
     def compute_energy_up_to_round(self, x, t):
-        if t == -2:
+        if t == -1:
             return torch.zeros(x.size(0))
         logNs0 = - self.round_zero.compute_energy(x)
-        logps = - self.selection_energy_up_to_round(x, t)
+        logps = - self.selection_energy_up_to_round(x, t-1)
         return - (logps + logNs0)
 
     # compute $\sum_{\tau \in \mathcal A(a(t))} \log p_{s,\tau} + logNs0
     def compute_energy_up_to_parent_round(self, x, t):
-        at = self.tree.parent[t]
-        return self.compute_energy_up_to_round(x, at)
+        at = self.tree.parent[t-1]
+        return self.compute_energy_up_to_round(x, at+1)
 
     def get_n_rounds(self):
         return self.tree.get_n_nodes()
