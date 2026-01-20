@@ -55,8 +55,8 @@ class Tree:
     def get_depth(self):
         return self.length.max().item()
 
-    def parent(self, v):
-        assert(v < self.get_n_nodes())
+    def get_parent(self, v):
+        assert(v < self.get_n_nodes() and v >= 0), f"Node index {v} not in range"
         return self.parent[v]
 
     def add_node(self, parent_node, name = None):

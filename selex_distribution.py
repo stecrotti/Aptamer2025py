@@ -27,10 +27,8 @@ class MultiModeDistribution(torch.nn.Module):
             x: torch.Tensor, # batch_size * L * q
             selected: torch.BoolTensor, # n_rounds * n_modes
     ):
-        minus_en = torch.stack(
-            [mode.compute_energy(x) for mode in self.modes],
-            dim=1
-        )
+        minus_en_ = tuple(mode.compute_energy(x) for mode in self.modes)
+        minus_en = torch.stack(minus_en_, dim=1)
         if self.normalized == True:
             minus_en = minus_en - minus_en.logsumexp(dim=1, keepdim=True)
 
@@ -77,7 +75,9 @@ class MultiRoundDistribution(torch.nn.Module):
 
     # compute $\sum_{\tau \in \mathcal A(a(t))} \log p_{s,\tau} + logNs0
     def compute_energy_up_to_parent_round(self, x, t):
-        at = self.tree.parent[t-1]
+        if t == 0:
+            return torch.zeros(x.size(0))
+        at = self.tree.get_parent(t-1)
         return self.compute_energy_up_to_round(x, at+1)
 
     def get_n_rounds(self):
@@ -121,52 +121,4 @@ class MultiRoundDistribution(torch.nn.Module):
         n_steps = n_sweeps * L
         with torch.no_grad():
             for step in torch.arange(n_steps):
-                self.metropolis_step_uniform_sites(chains, t, beta)
-
-    def metropolis_step_uniform_sites_potts(
-        self,
-        chains: torch.Tensor,
-        J: torch.Tensor,
-        h: torch.Tensor,
-        beta: float = 1.0
-        # random number generator!
-    ):
-        device = chains.device
-        N, L, q = chains.shape
-
-
-        idx_batch = torch.randint(0, L, (N,), device=device)
-        res_new = one_hot(torch.randint(0, q, (N,), device=device), num_classes=q).type(chains.dtype)
-        batch_arange = torch.arange(N, device=device)
-        res_old = chains[batch_arange, idx_batch]
-        # Compute local fields
-        biases = h[idx_batch]
-        couplings_batch = J[idx_batch]
-        chains_flat = chains.reshape(N, L * q, 1)
-        couplings_flat = couplings_batch.reshape(N, q, L * q)
-        coupling_term = torch.bmm(couplings_flat, chains_flat).squeeze(-1)
-        local_field = biases + coupling_term # Shape: (N, q)
-        # Metropolis acceptance step
-        delta_E = torch.sum((res_old - res_new) * local_field, dim=-1) # Shape: (N,)
-        acceptance_prob = torch.exp(- beta * delta_E)
-        random_uniform = torch.rand(N, device=device, dtype=chains.dtype)
-        accept_mask = (random_uniform < acceptance_prob) # Shape: (N,)
-        final_residues = torch.where(accept_mask.unsqueeze(-1), res_new, res_old)
-        chains[batch_arange, idx_batch] = final_residues
-
-    def sample_metropolis_uniform_sites_potts(
-        self,
-        chains: torch.Tensor,
-        t: int,
-        n_sweeps: int,
-        beta: float = 1.0,
-        # random number generator!
-    ):
-        L = chains.size(1)
-        n_steps = n_sweeps * L
-        ps = self.selection.modes[0]
-        h = self.round_zero.h + t * ps.h
-        J = ps.J
-        with torch.no_grad():
-            for step in torch.arange(n_steps):
-                self.metropolis_step_uniform_sites_potts(chains, J, h, beta)
+                self.metropolis_step_uniform_sites(chains.select(0, t), t, beta)
