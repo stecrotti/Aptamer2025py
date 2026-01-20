@@ -11,7 +11,10 @@ pandas = ">=2.3.3,<3"
 jupyter = ">=1.1.1,<2"
 python = ">=3.12,<3.13"
 logomaker = ">=0.8.6,<0.9"
+ipykernel = ">=7.1.0,<8"
+jupyter_client = ">=8.8.0,<9"
+zeromq = ">=4.3.5,<5"
+pyzmq = ">=27.1.0,<28"
 
 [pypi-dependencies]
 adabmdca = ">=0.7,<0.8"
-torch = { version = "*" }
