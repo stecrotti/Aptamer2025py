@@ -11,6 +11,7 @@ pandas = ">=2.3.3,<3"
 jupyter = ">=1.1.1,<2"
 python = ">=3.12,<3.13"
 logomaker = ">=0.8.6,<0.9"
+line_profiler = ">=5.0.0,<6"
 
 [pypi-dependencies]
 adabmdca = ">=0.7,<0.8"
