@@ -90,6 +90,24 @@ class ConvergenceMetricsCallback:
         
         return fig, axes
     
+def compute_potts_covariance(model, grad_model, grad_data):
+    fi = grad_data[1]
+    fij = grad_data[2]
+    pi = grad_model[1]
+    pij = grad_model[2]
+    mask = model.selection.modes[0].mask
+    pij = pij * mask * 2
+    fij = fij * mask * 2
+    cov_data = fij - torch.einsum('ij,kl->ijkl', fi, fi)
+    cov_chains = pij - torch.einsum('ij,kl->ijkl', pi, pi)
+    L = fi.size(0)
+    idx_row, idx_col = torch.tril_indices(L, L, offset=-1)
+    fij_extract = cov_data[idx_row, :, idx_col, :].reshape(-1)
+    pij_extract = cov_chains[idx_row, :, idx_col, :].reshape(-1)
+    pearson = torch.corrcoef(torch.stack([fij_extract.float(), pij_extract.float()]))[0, 1].item()
+    
+    return pearson
+    
 class PearsonCovarianceCallback:
     def __init__(self):
         self.pearson = []
@@ -99,15 +117,8 @@ class PearsonCovarianceCallback:
     def before_training(self, *args, **kwargs):
         pass
 
-    def after_step(self, model, grad_model, grad_data, total_reads, *args, **kwargs):
-        fi = grad_data[1]
-        fij = grad_data[2]
-        pi = grad_model[1]
-        pij = grad_model[2]
-        mask = model.selection.modes[0].mask
-        pij = pij * mask * 2
-        fij = fij * mask * 2
-        pearson, slope = selex_dca.get_correlation_two_points(fij, pij, fi, pi, total_reads)
+    def after_step(self, model, grad_model, grad_data,  *args, **kwargs):
+        pearson = compute_potts_covariance(model, grad_model, grad_data)
         self.pearson.append(pearson)
         self.grad_model.append(grad_model)
         self.grad_data.append(grad_data)
