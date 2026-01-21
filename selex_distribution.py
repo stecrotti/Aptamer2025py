@@ -122,3 +122,34 @@ class MultiRoundDistribution(torch.nn.Module):
         with torch.no_grad():
             for step in torch.arange(n_steps):
                 self.metropolis_step_uniform_sites(chains.select(0, t), t, beta)
+
+    def metropolis_sampler_gpu(self, chains, t, n_sweeps):
+
+        B, L, q = chains.shape
+        device = chains.device
+        e_current = self.compute_energy_up_to_round(chains, t)
+
+        for _ in range(n_sweeps):
+            proposal_flip_indices = torch.randint(0, L, (B,), device=device)
+            proposal_new_tokens = torch.randint(0, q, (B,), device=device)
+            
+            # Flatten to (B, N*q), apply changes, then reshape
+            chains_flat = chains.view(B, -1)
+            
+            # Zero out the entire position (q consecutive values)
+            zero_indices = (proposal_flip_indices * q).unsqueeze(1) + torch.arange(q, device=device).unsqueeze(0)
+            chains_flat_zeroed = chains_flat.scatter(1, zero_indices, 0)
+            
+            # Set the new token
+            new_token_indices = (proposal_flip_indices * q + proposal_new_tokens).unsqueeze(1)
+            x_flat_proposal = chains_flat_zeroed.scatter(1, new_token_indices, 1)
+            
+            chains_proposal = x_flat_proposal.view(B, L, q)
+            e_proposal = self.compute_energy_up_to_round(chains_proposal, t)
+
+            metropolis_acceptance_mask = torch.log(torch.rand(B, device=device)) < e_current - e_proposal
+
+            chains = torch.where(metropolis_acceptance_mask.view(B, 1, 1), chains_proposal, x_current)
+            e_current = torch.where(metropolis_acceptance_mask, e_proposal, e_current)
+
+        return chains
