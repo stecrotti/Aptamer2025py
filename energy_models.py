@@ -87,18 +87,50 @@ class Potts(EnergyModel):
     def forward(self, x):
         return self.compute_energy(x)
 
+    # def set_zerosum_gauge(self):
+    #     h = self.h.detach().clone()
+    #     h = h - h.mean(dim=1, keepdim=True)
+
+    #     J = self.J.detach() * self.mask.detach()
+    #     J = J - (
+    #         J.mean(dim=1, keepdim=True)
+    #         + J.mean(dim=3, keepdim=True)
+    #         - J.mean(dim=(1, 3), keepdim=True)
+    #     )
+
+    #     return Potts(J, h)
+
     def set_zerosum_gauge(self):
         h = self.h.detach().clone()
-        h = h - h.mean(dim=1, keepdim=True)
+        J = (self.J.detach() * self.mask.detach()).clone()
 
-        J = self.J.detach() * self.mask.detach()
-        J = J - (
-            J.mean(dim=1, keepdim=True)
-            + J.mean(dim=3, keepdim=True)
-            - J.mean(dim=(1, 3), keepdim=True)
-        )
+        L, q = h.shape
+
+        # K_ij(a) = - mean_b J_ij(a,b)
+        K = J.mean(dim=3) * (-1.0)   # shape: (L, q, L)
+
+        # transform J
+        for i in range(L):
+            for j in range(L):
+                if i == j:
+                    continue
+                J[i, :, j, :] += K[i, :, j].unsqueeze(1)
+                J[i, :, j, :] += K[j, :, i].unsqueeze(0)
+
+        # transform h
+        for i in range(L):
+            for j in range(L):
+                if i == j:
+                    continue
+                h[i] -= K[i, :, j]
+
+        # final per-site constant removal
+        h -= h.mean(dim=1, keepdim=True)
 
         return Potts(J, h)
+
+
+
         
 # used as dummy for checks
 class InfiniteEnergy(EnergyModel):
