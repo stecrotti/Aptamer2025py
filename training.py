@@ -116,7 +116,7 @@ def train(
             L_model = L_model + normalized_total_reads[t] * L_m
             
             # extract batch of data from round t
-            data_batch = next(iter(data_loaders[t]))
+            data_batch = data_loaders[t].get_batch()
             L_d = compute_moments_data_at_round(model, data_batch, t)
             L_data = L_data + normalized_total_reads[t] * L_d
             # logZt = (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
