@@ -14,7 +14,7 @@ def compute_slope(grad_model, grad_data):
     n = len(x)
     num = n * (x @ y) - y.sum() * x.sum()
     den = n * (x @ x) - torch.square(x.sum())
-    return torch.abs(num / den)
+    return torch.abs(num / den).item()
 
 class ConvergenceMetricsCallback:
     def __init__(self, progress_bar=True):
@@ -43,7 +43,7 @@ class ConvergenceMetricsCallback:
         pearson = compute_pearson(grad_model, grad_data)
         slope = compute_slope(grad_model, grad_data)
         grad_vec = torch.nn.utils.parameters_to_vector(grad_total)
-        grad_norm = torch.sqrt(torch.square(grad_vec).sum()) / len(grad_vec)
+        grad_norm = (torch.sqrt(torch.square(grad_vec).sum()) / len(grad_vec)).item()
         self.pearson.append(pearson)
         self.slope.append(slope)
         self.grad_norm.append(grad_norm)
