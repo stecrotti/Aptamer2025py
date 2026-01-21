@@ -7,7 +7,7 @@ from pathlib import Path
 import adabmDCA
 from adabmDCA.fasta import get_tokens, encode_sequence
 
-
+# copied from adabmDCA
 def _one_hot(x: torch.Tensor, num_classes: int = -1, dtype: torch.dtype = torch.float32) -> torch.Tensor:
    
     if x.dim() not in (1, 2):
@@ -201,6 +201,7 @@ def get_count_two_points(
     pseudo_count: float,
     ) -> torch.Tensor:
     
+    device = data.device
     total_count, L, q = data.shape
     data_oh = data.reshape(total_count, q * L)
     
@@ -211,10 +212,10 @@ def get_count_two_points(
     # Set the diagonal terms of fij to the single point frequencies
     Rij_tilde = torch.diagonal_scatter(Rij_tilde, Rij_diag, dim1=0, dim2=1)
 
-    mask = torch.ones(L, q, L, q)
+    mask = torch.ones(L, q, L, q, device=device)
     mask[torch.arange(L), :, torch.arange(L), :] = 0
     mask_2d = mask.reshape(L*q, L*q)
-    mask_2d += torch.diag(torch.ones(L*q))
+    mask_2d += torch.diag(torch.ones(L*q, device=device))
     Rij_tilde = Rij_tilde * mask_2d
     Rij_tilde = Rij_tilde.reshape(L, q, L, q)
 

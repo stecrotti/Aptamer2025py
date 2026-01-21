@@ -58,7 +58,7 @@ class Potts(EnergyModel):
         self.h = torch.nn.Parameter(h)
 
         L, q = sz_h
-        mask = torch.ones(L, q, L, q)
+        mask = torch.ones(L, q, L, q, device=J.device)
         # set the (i,i) blocks to zero
         mask[torch.arange(L), :, torch.arange(L), :] = 0
         self.J = torch.nn.Parameter(J)
