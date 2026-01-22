@@ -2,6 +2,7 @@ import torch
 from utils import one_hot
 import selex_distribution
 from callback import ConvergenceMetricsCallback
+import sampling
 
 def init_chains(
     n_rounds: int,
@@ -23,7 +24,8 @@ def init_chains(
 
 def update_chains_default():
     def update_chains(chains, t, model, n_sweeps):
-        model.sample_metropolis_uniform_sites(chains, t, n_sweeps)
+        # model.sample_metropolis_uniform_sites(chains, t, n_sweeps)
+        return sampling.sample_metropolis(model, chains, t, n_sweeps)
     return update_chains
 
 def compute_moments_model_at_round(model, chains, t):
@@ -110,7 +112,7 @@ def train(
         for t in range(n_rounds):
             # update chains
             with torch.no_grad():
-                update_chains(chains, t, model, n_sweeps)
+                e = update_chains(chains, t, model, n_sweeps)
             # compute gradient
             L_m = compute_moments_model_at_round(model, chains[t].clone(), t)
             L_model = L_model + normalized_total_reads[t] * L_m
