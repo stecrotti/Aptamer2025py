@@ -86,6 +86,7 @@ def train(
     update_chains = update_chains_default()
 ):
     n_rounds = len(chains)
+    ts = torch.arange(n_rounds)
     assert chains.shape[0] == n_rounds
     normalized_total_reads = total_reads / total_reads.sum(0, keepdim=True)
 
@@ -93,6 +94,7 @@ def train(
     device=chains.device
     dtype=chains.dtype
     log_n_chains = torch.log(torch.tensor(n_chains, device=device, dtype=dtype)).item()
+    energies_AIS = [model.compute_energy_up_to_round(chains[t], t) for t in ts]
 
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=l2reg)
 
@@ -108,11 +110,13 @@ def train(
     while not converged:
         optimizer.zero_grad()
         L_model = L_data = 0
-        # log_likelihood = torch.Tensor(0)
-        for t in range(n_rounds):
-            # update chains
+        log_likelihood = 0.0
+        for t in ts:
+            # update chains and log weights for estimate of normalization
             with torch.no_grad():
-                e = update_chains(chains, t, model, n_sweeps)
+                energy_model_t = update_chains(chains, t, model, n_sweeps)
+                log_weights[t] += energies_AIS[t] - energy_model_t
+                energies_AIS[t] = energy_model_t
             # compute gradient
             L_m = compute_moments_model_at_round(model, chains[t].clone(), t)
             L_model = L_model + normalized_total_reads[t] * L_m
@@ -121,8 +125,8 @@ def train(
             data_batch = data_loaders[t].get_batch()
             L_d = compute_moments_data_at_round(model, data_batch, t)
             L_data = L_data + normalized_total_reads[t] * L_d
-            # logZt = (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
-            # log_likelihood += normalized_total_reads[t] * (- L_d - logZt)
+            logZt = (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
+            log_likelihood += (normalized_total_reads[t] * (L_d.detach().clone() - logZt)).item()
         
             # TODO: compute round-wise convergence metrics
 

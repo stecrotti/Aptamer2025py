@@ -31,9 +31,11 @@ class MultiModeDistribution(torch.nn.Module):
         minus_en = torch.stack(minus_en_, dim=1)
         if self.normalized == True:
             minus_en = minus_en - minus_en.logsumexp(dim=1, keepdim=True)
-
-        # first pick only the selected rounds, then (log)sum(exp) over modes, then sum over rounds
-        return -(-minus_en[:,None,:] + torch.log(selected)).logsumexp(dim=-1).sum(-1)
+        # pick only the selected rounds 
+        en_selected =  - torch.where(selected, minus_en.unsqueeze(1), torch.inf)
+        # (log)sum(exp) over modes, then sum over rounds
+        en = en_selected.logsumexp(dim=-1).sum(-1)
+        return en
         
     
 class MultiRoundDistribution(torch.nn.Module):
@@ -73,12 +75,12 @@ class MultiRoundDistribution(torch.nn.Module):
         logps = - self.selection_energy_up_to_round(x, t)
         return - (logps + logNs0)
 
-    # compute $\sum_{\tau \in \mathcal A(a(t))} \log p_{s,\tau} + logNs0
-    def compute_energy_up_to_parent_round(self, x, t):
-        if t == 0:
-            return torch.zeros(x.size(0), device=x.device)
-        at = self.tree.get_parent(t-1)
-        return self.compute_energy_up_to_round(x, at+1)
+    # # compute $\sum_{\tau \in \mathcal A(a(t))} \log p_{s,\tau} + logNs0
+    # def compute_energy_up_to_parent_round(self, x, t):
+    #     if t == 0:
+    #         return torch.zeros(x.size(0), device=x.device)
+    #     at = self.tree.get_parent(t-1)
+    #     return self.compute_energy_up_to_round(x, at+1)
 
     def get_n_rounds(self):
         return self.tree.get_n_nodes()
