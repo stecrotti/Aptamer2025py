@@ -38,6 +38,11 @@ class IndepSites(EnergyModel):
         h = self.h.detach().clone()
         h = h - h.mean(dim=1, keepdim=True)
         return IndepSites(h)
+    
+    def avg_energy(self):
+        p = torch.exp(self.h)
+        p = p / p.sum(1, keepdim=True)
+        return (- self.h * p).sum()
 
 class Potts(EnergyModel):
     def __init__(
