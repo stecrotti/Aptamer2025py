@@ -30,10 +30,12 @@ def _sample_metropolis(model, chains, t, n_steps, beta = 1.0):
 
     return chains, e_current
 
+
 def sample_metropolis(model, chains, t, n_sweeps, beta=1.0):
     L = chains.size(2)
     n_steps = n_sweeps * L
     with torch.no_grad():
-        chains_t, energies = _sample_metropolis(model, chains.select(0, t), t, n_steps, beta)
+        chains_t = chains.select(0, t)
+        chains_t, energies = _sample_metropolis(model, chains_t, t, n_steps, beta)
         chains[t] = chains_t
     return energies
