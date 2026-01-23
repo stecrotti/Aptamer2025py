@@ -30,6 +30,14 @@ class IndepSites(EnergyModel):
         bias_flat = self.h.view(L * q)
 
         return - x_flat @ bias_flat
+    
+    @staticmethod
+    def compute_energy_stacked(x: torch.Tensor, h_stacked):
+        """
+        x: (B, L, q) input batch
+        Returns: (B, N) tensor of energies
+        """
+        return -torch.einsum('blq,nlq->bn', x, h_stacked)
 
     def forward(self, x):
         return self.compute_energy(x)
@@ -83,6 +91,41 @@ class Potts(EnergyModel):
         bias_term = x_flat @ bias_flat
         coupling_term = torch.sum(x_flat * (x_flat @ couplings_flat), dim=1)
         return - bias_term - 0.5 * coupling_term
+    
+    @staticmethod
+    def compute_energy_stacked(x: torch.Tensor, h: torch.Tensor, J: torch.Tensor):
+        """
+        x: (B, L, q)
+        J: (N, L, q, L, q)
+        h: (N, L, q)
+        Returns: (B, N)
+        """
+        N, L, q = h.shape
+        B = x.shape[0]
+
+        # Create mask (same as in __init__)
+        mask = torch.ones(L, q, L, q, device=x.device)
+        mask[torch.arange(L), :, torch.arange(L), :] = 0
+
+        # Apply mask to all J
+        J_masked = J * mask  # (N, L, q, L, q)
+
+        # Flatten
+        x_flat = x.view(B, L * q)         # (B, L*q)
+        h_flat = h.view(N, L * q)         # (N, L*q)
+        J_flat = J_masked.view(N, L * q, L * q)  # (N, L*q, L*q)
+
+        # Bias term: (B, N)
+        bias_term = torch.einsum('bi,ni->bn', x_flat, h_flat)
+
+        # Coupling term: (B, N)
+        # (B, L*q) @ (N, L*q, L*q) -> (B, N, L*q)
+        xJ = torch.einsum('bi,nij->bnj', x_flat, J_flat)
+        # (B, N, L*q) * (B, 1, L*q) -> (B, N, L*q)
+        coupling_term = torch.sum(xJ * x_flat.unsqueeze(1), dim=2)  # (B, N)
+
+        # Final energy: (B, N)
+        return -bias_term - 0.5 * coupling_term
 
     def forward(self, x):
         return self.compute_energy(x)

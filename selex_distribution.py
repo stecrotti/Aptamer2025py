@@ -5,6 +5,22 @@ from tree import Tree
 class EnergyModel(Module):
     def __init__(self):
         super().__init__()
+
+    @staticmethod
+    def compute_energy_stacked(x, *params):
+        """
+        Default fallback: assumes first dimension of each param is the stacking dimension.
+        Calls the class's compute_energy for each set of parameters.
+        """
+        N = params[0].shape[0]
+        results = []
+        for i in range(N):
+            # Extract i-th set of parameters for this model
+            param_i = [p[i] for p in params]
+            # Create a temporary model instance with these parameters
+            model = type(params[0]).__self_class__(*param_i)
+            results.append(model.compute_energy(x))
+        return torch.stack(results, dim=1)  # (B, N)
     
 class MultiModeDistribution(torch.nn.Module):
     def __init__(
@@ -21,21 +37,39 @@ class MultiModeDistribution(torch.nn.Module):
     def get_n_modes(self):
         return len(self.modes) 
     
+    def _compute_energy_modes(self, x: torch.Tensor):
+        return torch.stack(
+            [mode.compute_energy(x) for mode in self.modes],
+            dim=1
+        )
+    
     def compute_energy(
             self,
             x: torch.Tensor, # batch_size * L * q
             selected: torch.BoolTensor, # n_rounds * n_modes
     ):
-        minus_en = torch.stack(
-            [mode.compute_energy(x) for mode in self.modes],
-            dim=1
-        )
+        minus_en = self._compute_energy_modes(x)
         if self.normalized == True:
             minus_en = minus_en - minus_en.logsumexp(dim=1, keepdim=True)
 
         # first pick only the selected rounds, then (log)sum(exp) over modes, then sum over rounds
         return -(-minus_en[:,None,:] + torch.log(selected)).logsumexp(dim=-1).sum(-1)
-        
+    
+class HomogeneousMultiModeDistribution(MultiModeDistribution):
+    def __init__(
+        self,
+        *modes,
+        normalized: bool = True
+    ):
+        super().__init__(*modes, normalized=normalized)
+        mode_type = type(modes[0])
+        for mode in modes:
+            assert type(mode) == mode_type
+        self.mode_type = mode_type
+        self.tensors_stacked = tuple(torch.stack(params) for params in zip(*[mode.parameters() for mode in modes]))
+
+    def _compute_energy_modes(self, x: torch.Tensor):
+        return self.mode_type.compute_energy_stacked(x, *self.tensors_stacked)
     
 class MultiRoundDistribution(torch.nn.Module):
     def __init__(

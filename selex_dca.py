@@ -9,6 +9,8 @@ from adabmDCA.statmech import _update_weights_AIS
 from adabmDCA.stats import _get_slope
 from adabmDCA.functional import one_hot
 
+import sampling
+
 
 def extract_Cij_from_freq(
     fij: torch.Tensor,
@@ -400,7 +402,9 @@ def train(
         # Update the Markov chains
         for t in range(n_rounds):
             params_t = get_params_at_round(params, t)
-            chains[t] = sampler(chains=chains[t], params=params_t, nsweeps=nsweeps)
+            # chains[t] = sampler(chains=chains[t], params=params_t, nsweeps=nsweeps)
+            compute_energy = lambda x : adabmDCA.statmech.compute_energy(x, params_t)
+            sampling.sample_metropolis_uniform_sites(chains[t], compute_energy, n_sweeps=nsweeps)
         
         
         # Compute the single-point and two-points frequencies of the simulated data
