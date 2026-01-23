@@ -29,11 +29,11 @@ def update_chains_default():
 
 def compute_moments_model_at_round(model, chains, t):
     # this L is not physically a likelihood, more like a computational trick
-    return model.compute_energy_up_to_round(chains, t).mean()
+    return - model.compute_energy_up_to_round(chains, t).mean()
 
 def compute_moments_data_at_round(model, data_batch, t):
     # this L is not physically a likelihood, more like a computational trick
-    return model.compute_energy_up_to_round(data_batch, t).mean()
+    return - model.compute_energy_up_to_round(data_batch, t).mean()
 
 def compute_grad_model(model, L_model, retain_graph):
     params = tuple(model.parameters())
@@ -60,7 +60,8 @@ def compute_grad_data(model, L_data, retain_graph):
     return grad_data
 
 def compute_total_gradient(model, grad_model, grad_data):
-    grad_total = tuple(-(gm - ge) for gm, ge in zip(grad_model, grad_data))
+    # minus because we want gradient of *negative* loglikelihood
+    grad_total = tuple(-(gd - gm) for gm, gd in zip(grad_model, grad_data))
     
     with torch.no_grad():
         for p, g in zip(model.parameters(), grad_total):
@@ -84,22 +85,22 @@ def train(
     callbacks = [ConvergenceMetricsCallback()],
     update_chains = update_chains_default()
 ):
-    n_rounds = len(chains)
+    n_rounds, n_chains, L, q = chains.size()
     ts = torch.arange(n_rounds)
     assert chains.shape[0] == n_rounds
     normalized_total_reads = total_reads / total_reads.sum(0, keepdim=True)
 
-    n_chains = chains.shape[1] 
-    device=chains.device
-    dtype=chains.dtype
+    device = chains.device
+    dtype = chains.dtype
     log_n_chains = torch.log(torch.tensor(n_chains, device=device, dtype=dtype)).item()
     energies_AIS = [model.compute_energy_up_to_round(chains[t], t) for t in ts]
+    Llogq = L * torch.log(torch.tensor(q, device=device, dtype=dtype)).item()
 
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=l2reg)
 
-    log_likelihood = - log_n_chains
+    log_likelihood = torch.nan
     if log_weights is None:
-        log_weights = torch.zeros(n_rounds, n_chains, device=device, dtype=dtype)
+        log_weights = torch.full((n_rounds, n_chains), Llogq, device=device, dtype=dtype)
 
     epochs = 0   
     converged = (epochs > max_epochs)
@@ -124,15 +125,14 @@ def train(
             data_batch = data_loaders[t].get_batch()
             L_d = compute_moments_data_at_round(model, data_batch, t)
             L_data = L_data + normalized_total_reads[t] * L_d
-            logZt = (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
-            log_likelihood += (normalized_total_reads[t] * (L_d.detach().clone() - logZt)).item()
+            logZt = Llogq + (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
+            Lt = L_d.detach().clone() - logZt
+            log_likelihood += (normalized_total_reads[t] * Lt).item()
         
             # TODO: compute round-wise convergence metrics
 
         # Compute gradient
         grad_model = compute_grad_model(model, L_model, retain_graph=True)
-        # grad_model = compute_grad_model_indep(model)
-        # grad_data = grad_data_cached
         grad_data = compute_grad_data(model, L_data, retain_graph=False)
         grad_total = compute_total_gradient(model, grad_model, grad_data)
         # do gradient step on params
