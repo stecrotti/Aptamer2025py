@@ -24,7 +24,6 @@ def init_chains(
 
 def update_chains_default():
     def update_chains(chains, t, model, n_sweeps):
-        # model.sample_metropolis_uniform_sites(chains, t, n_sweeps)
         return sampling.sample_metropolis(model, chains, t, n_sweeps)
     return update_chains
 
