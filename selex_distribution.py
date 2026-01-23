@@ -27,8 +27,8 @@ class MultiModeDistribution(torch.nn.Module):
             x: torch.Tensor, # batch_size * L * q
             selected: torch.BoolTensor, # n_rounds * n_modes
     ):
-        minus_en_ = tuple(mode.compute_energy(x) for mode in self.modes)
-        minus_en = torch.stack(minus_en_, dim=1)
+        minus_en_tuple = tuple(- mode.compute_energy(x) for mode in self.modes)
+        minus_en = torch.stack(minus_en_tuple, dim=1)
         if self.normalized == True:
             minus_en = minus_en - minus_en.logsumexp(dim=1, keepdim=True)
         # pick only the selected rounds 
