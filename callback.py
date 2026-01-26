@@ -1,7 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
 from tqdm.autonotebook import tqdm
-import selex_dca
+
 
 def compute_pearson(grad_model, grad_data):
     x = torch.nn.utils.parameters_to_vector(grad_model)
@@ -16,7 +16,16 @@ def compute_slope(grad_model, grad_data):
     den = n * (x @ x) - torch.square(x.sum())
     return torch.abs(num / den).item()
 
-class ConvergenceMetricsCallback:
+class Callback:
+    pass
+
+    def before_training(self, *args, **kwargs):
+        pass
+
+    def after_step(self, *args, **kwargs):
+        return False
+
+class ConvergenceMetricsCallback(Callback):
     def __init__(self, progress_bar=True):
         self.pearson = []
         self.slope = []
@@ -108,14 +117,11 @@ def compute_potts_covariance(model, grad_model, grad_data):
     
     return pearson
     
-class PearsonCovarianceCallback:
+class PearsonCovarianceCallback(Callback):
     def __init__(self):
         self.pearson = []
         self.grad_model = []
         self.grad_data = []
-
-    def before_training(self, *args, **kwargs):
-        pass
 
     def after_step(self, model, grad_model, grad_data,  *args, **kwargs):
         pearson = compute_potts_covariance(model, grad_model, grad_data)
