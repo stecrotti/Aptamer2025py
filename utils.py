@@ -285,23 +285,17 @@ def zerosum_gauge_couplings(coupling_matrix):
                             coupling_matrix.mean(dim=(1, 3), keepdim=True)
     return coupling_matrix
 
-def set_zerosum_gauge(params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-    """Sets the zero-sum gauge on the coupling matrix and biases.
-    
-    Args:
-        params (Dict[str, torch.Tensor]): Parameters of the model.
-        
-    Returns:
-        Dict[str, torch.Tensor]: New dictionary with modified parameters.
-            "bias": torch.Tensor of shape (L, q)
-            "coupling_matrix": torch.Tensor of shape (L, q, L, q)
-    """
-    params = {key: value.clone() for key, value in params.items()}
+def set_zerosum_gauge(J, h, mask=None):
+    L, q = h.shape
+    if mask is None:
+        mask = torch.ones(L, q, L, q, device=J.device)
+        mask[torch.arange(L), :, torch.arange(L), :] = 0
+    Jmasked = J * mask
 
-    for key in params:
-        if key.startswith("bias"):
-            params[key] = zerosum_gauge_bias(params[key])
-        elif key.startswith("coupling"): 
-            params[key] = zerosum_gauge_couplings(params[key])
-    
-    return params
+    dh = 0.5 * (Jmasked.mean(3).sum(2) + Jmasked.mean(1).sum(0) + Jmasked.mean(3).mean(1, keepdim=True).sum(2))
+    dJ = Jmasked.mean(3, keepdim=True) + Jmasked.mean(1, keepdim=True) + Jmasked.mean((1,3), keepdim=True)
+    J -= dJ
+    h += dh
+    h -= h.mean(dim=1, keepdim=True)
+
+    return J, h
