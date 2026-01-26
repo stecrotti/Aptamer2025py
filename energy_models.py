@@ -94,7 +94,7 @@ class Potts(EnergyModel):
         return self.compute_energy(x)
 
     def set_zerosum_gauge(self):
-        J, h = utils.set_zerosum_gauge(J, h, self.mask)
+        J, h = utils.set_zerosum_gauge(self.J.detach().clone(), self.h.detach().clone(), self.mask)
         return Potts(J, h)
 
         
