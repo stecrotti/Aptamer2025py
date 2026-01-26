@@ -82,6 +82,7 @@ def train(
     thresh_slope = 1e-2,
     l2reg: float = 0.0,
     log_weights: torch.Tensor | None = None,
+    optimizer = None,
     callbacks = [ConvergenceMetricsCallback()],
     update_chains = update_chains_default()
 ):
@@ -96,7 +97,8 @@ def train(
     energies_AIS = [model.compute_energy_up_to_round(chains[t], t) for t in ts]
     Llogq = L * torch.log(torch.tensor(q, device=device, dtype=dtype)).item()
 
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=l2reg)
+    if optimizer is None:
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=l2reg)
 
     log_likelihood = torch.nan
     if log_weights is None:
