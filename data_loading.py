@@ -40,7 +40,8 @@ class SelexRoundDataLoader:
         if generator is None:
             generator = self.generator
         nseq = self.seq_oh.shape[0]
-        perm = torch.randperm(nseq, generator=generator)
-        idx = perm[:self.batch_size].to(self.device)
-        return self.seq_oh[idx]
+        # generate random indices on the same device as data
+        perm = torch.randperm(nseq, generator=generator).to(self.seq_oh.device)
+        idx = perm[:self.batch_size]
+        return self.seq_oh[idx].to(self.device)
     
