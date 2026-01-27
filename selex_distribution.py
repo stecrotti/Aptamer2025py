@@ -75,12 +75,18 @@ class MultiRoundDistribution(torch.nn.Module):
         logps = - self.selection_energy_up_to_round(x, t)
         return - (logps + logNs0)
 
-    # # compute $\sum_{\tau \in \mathcal A(a(t))} \log p_{s,\tau} + logNs0
-    # def compute_energy_up_to_parent_round(self, x, t):
-    #     if t == 0:
-    #         return torch.zeros(x.size(0), device=x.device)
-    #     at = self.tree.get_parent(t-1)
-    #     return self.compute_energy_up_to_round(x, at+1)
-
     def get_n_rounds(self):
         return self.tree.get_n_nodes()
+    
+    def _apply(self, fn):
+        super()._apply(fn)
+        
+        self.tree.parent = fn(self.tree.parent)
+        self.tree.ancestors_flat = fn(self.tree.ancestors_flat)
+        self.tree.offset = fn(self.tree.offset)
+        self.tree.length = fn(self.tree.length)
+        self.selected_modes = fn(self.selected_modes)
+        # self.round_zero = self.round_zero._apply(fn)
+        # self.selection = self.selection._apply(fn)
+        
+        return self

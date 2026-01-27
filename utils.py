@@ -146,7 +146,7 @@ def import_from_fasta(
     return out
 
 def sequences_from_file(experiment_id: str, round_id: str, 
-                        device=adabmDCA.utils.get_device("cpu", False)): 
+                        device=torch.device("cpu")): 
     dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()
     filepath = dirpath / (experiment_id + round_id + "_merged.fastq_result.fas.gz")
     tokens = "ACGT"
