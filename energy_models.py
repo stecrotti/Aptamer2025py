@@ -68,7 +68,9 @@ class Potts(EnergyModel):
         # set the (i,i) blocks to zero
         mask[torch.arange(L), :, torch.arange(L), :] = 0
         self.J = torch.nn.Parameter(J)
-        self.mask = mask
+        # self.mask = mask
+        # so that mask is not trained, but automatically moved to gpu with the rest of the model
+        self.register_buffer('mask', mask)
 
     def get_n_states(self):
         return self.h.size(1)

@@ -9,15 +9,17 @@ def init_chains(
     n_chains: int,
     L: int,
     q: int,
-    device: torch.device,
+    device: torch.device | None = None,
     dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
 
     if dtype is None:
         dtype = torch.float32
+    if device is None:
+        device = torch.device('cpu')
+
     chains = [torch.randint(low=0, high=q, size=(n_chains, L), device=device)
             for _ in range(n_rounds)]
-    
     chains_tensor = torch.stack([one_hot(c, num_classes=q).to(dtype=dtype, device=device) for c in chains])
     
     return chains_tensor   # n_rounds, n_chains, L, q
@@ -86,13 +88,13 @@ def train(
     callbacks = [ConvergenceMetricsCallback()],
     update_chains = update_chains_default()
 ):
+    device = chains.device
+    dtype = chains.dtype
     n_rounds, n_chains, L, q = chains.size()
-    ts = torch.arange(n_rounds)
+    ts = torch.arange(n_rounds, device=device)
     assert chains.shape[0] == n_rounds
     normalized_total_reads = total_reads / total_reads.sum(0, keepdim=True)
 
-    device = chains.device
-    dtype = chains.dtype
     log_n_chains = torch.log(torch.tensor(n_chains, device=device, dtype=dtype)).item()
     energies_AIS = [model.compute_energy_up_to_round(chains[t], t) for t in ts]
     Llogq = L * torch.log(torch.tensor(q, device=device, dtype=dtype)).item()
@@ -150,3 +152,5 @@ def train(
                          grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
                          target_pearson=target_pearson, thresh_slope=thresh_slope)
             converged = converged or c
+
+    model.zero_grad()
