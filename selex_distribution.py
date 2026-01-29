@@ -1,7 +1,7 @@
 import torch
 from torch.nn import Module
 from tree import Tree
-from utils import one_hot
+import sampling
 
 class EnergyModel(Module):
     def __init__(self):
@@ -47,7 +47,9 @@ class MultiRoundDistribution(torch.nn.Module):
         selected_modes: torch.BoolTensor,   # (n_rounds * n_modes) modes selected for at each round
     ):
         if selection.get_n_modes() != selected_modes.size(1):
-            raise ValueError(f"Number of modes must coincide for selection probability, got {selection.get_n_modes()} and {selected_modes.size(1)}")
+            raise ValueError(f"Number of modes must coincide for selection probability and selected modes, got {selection.get_n_modes()} and {selected_modes.size(1)}")
+        if tree.get_n_nodes() != selected_modes.size(0):
+            raise ValueError(f"Number of selection rounds must coincide for tree and selected modes, got {tree.get_n_nodes()+1} and {selected_modes.size(0)}")
         super().__init__()
         self.round_zero = round_zero
         self.selection = selection
@@ -76,6 +78,9 @@ class MultiRoundDistribution(torch.nn.Module):
         return - (logps + logNs0)
 
     def get_n_rounds(self):
+        return self.get_n_selection_rounds() + 1
+    
+    def get_n_selection_rounds(self):
         return self.tree.get_n_nodes()
     
     def _apply(self, fn):
@@ -86,7 +91,15 @@ class MultiRoundDistribution(torch.nn.Module):
         self.tree.offset = fn(self.tree.offset)
         self.tree.length = fn(self.tree.length)
         self.selected_modes = fn(self.selected_modes)
-        # self.round_zero = self.round_zero._apply(fn)
-        # self.selection = self.selection._apply(fn)
         
         return self
+
+    def sample(self, chains, n_sweeps, beta=1.0):
+        n_rounds, n_chains, L, q = chains.size()
+        energies = torch.zeros((n_rounds, n_chains), device=chains.device, dtype=chains.dtype)
+        for t in torch.arange(n_rounds):
+            with torch.no_grad():
+                energy_t = sampling.sample_metropolis(self, chains, t, n_sweeps, beta=beta)
+                energies[t] = energy_t
+        
+        return energies

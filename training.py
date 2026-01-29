@@ -110,7 +110,8 @@ def train(
     converged = (epochs > max_epochs)
     for callback in callbacks:
         callback.before_training(max_epochs=max_epochs)
-        
+
+    model.train()  
     while not converged:
         optimizer.zero_grad()
         L_model = L_data = 0
