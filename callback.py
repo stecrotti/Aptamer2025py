@@ -27,10 +27,13 @@ class Callback:
 
 class ConvergenceMetricsCallback(Callback):
     def __init__(self, progress_bar=True):
+        super().__init__()
         self.pearson = []
         self.slope = []
         self.grad_norm = []
         self.log_likelihood = []
+        self.grad_model = []
+        self.grad_data = []
         self.progress_bar = progress_bar
 
     def before_training(self, max_epochs, *args, **kwargs):
@@ -55,6 +58,8 @@ class ConvergenceMetricsCallback(Callback):
         self.slope.append(slope)
         self.grad_norm.append(grad_norm)
         self.log_likelihood.append(log_likelihood)
+        self.grad_model.append(grad_model.detach().clone())
+        self.grad_data.append(grad_data.detach().clone())
 
         if self.progress_bar:
             self.pbar.n = epochs
@@ -115,6 +120,7 @@ def compute_potts_covariance(model, grad_model, grad_data):
     
 class PearsonCovarianceCallback(Callback):
     def __init__(self):
+        super().__init__()
         self.pearson = []
 
     def after_step(self, model, grad_model, grad_data,  *args, **kwargs):
