@@ -1,6 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
 from tqdm.autonotebook import tqdm
+import energy_models
 
 
 def compute_pearson(grad_model, grad_data):
@@ -136,3 +137,66 @@ class PearsonCovarianceCallback(Callback):
         ax.set_ylabel('Pearson $C_{ij}$')
 
         return fig, ax
+    
+    
+class TeacherStudentCallback(Callback):
+    def __init__(self, model_teacher):
+        super().__init__()
+        self.model_teacher = model_teacher
+        self.pearson_Ns0 = []
+        self.pearson_ps = []
+
+    def after_step(self, model, *args, **kwargs):
+        model_teacher = self.model_teacher
+        model_student = model
+        Ns0_teacher = model_teacher.round_zero
+        Ns0_student = model_student.round_zero
+        if isinstance(Ns0_teacher, energy_models.IndepSites) or isinstance(Ns0_teacher, energy_models.Potts):
+            Ns0_teacher = Ns0_teacher.set_zerosum_gauge()
+            Ns0_student = Ns0_student.set_zerosum_gauge()
+        pearson_Ns0_round = []
+        for (param_teacher, param_student) in zip(Ns0_teacher.parameters(), Ns0_student.parameters()):
+            x = param_teacher.detach().clone().cpu().reshape(-1)
+            y = param_student.detach().clone().cpu().reshape(-1)
+            p = torch.corrcoef(torch.stack([x, y]))[0, 1].item()
+            pearson_Ns0_round.append(p)
+        self.pearson_Ns0.append(pearson_Ns0_round)
+        
+        pearson_ps_round = []
+        for (mode_teacher, mode_student) in zip(model_teacher.selection.modes, model_student.selection.modes):
+            if isinstance(mode_teacher, energy_models.IndepSites) or isinstance(mode_teacher, energy_models.Potts):
+                mode_teacher = mode_teacher.set_zerosum_gauge()
+                mode_student = mode_student.set_zerosum_gauge()
+            pearson_ps_mode = []
+            for (param_teacher, param_student) in zip(mode_teacher.parameters(), mode_student.parameters()):
+                x = param_teacher.detach().clone().cpu().reshape(-1)
+                y = param_student.detach().clone().cpu().reshape(-1)
+                p = torch.corrcoef(torch.stack([x, y]))[0, 1].item()
+                pearson_ps_mode.append(p)
+            pearson_ps_round.append(pearson_ps_mode)
+        self.pearson_ps.append(pearson_ps_round)
+
+    def plot(self, figsize=(10, 4)):
+        n_selection_modes = self.model_teacher.selection.get_n_modes()
+        fig, axes = plt.subplots(1, n_selection_modes + 1, figsize=figsize)
+
+        ax = axes[0]
+        ax.set_title('Ns0')
+        pearson_Ns0 = zip(*self.pearson_Ns0)
+        for (pearson, np) in zip(pearson_Ns0, self.model_teacher.round_zero.named_parameters()):
+            ax.plot(pearson, label=np[0])
+            ax.set_xlabel('iter'); ax.set_ylabel('Pearson')
+            ax.legend()
+        
+        
+        pearson_ps = zip(*self.pearson_ps)
+        for (i, pearson_mode) in enumerate(pearson_ps):
+            ax = axes[i+1]
+            ax.set_title(f'ps - mode #{i}')
+            for (pearson, np) in zip(zip(*pearson_mode), self.model_teacher.selection.modes[i].named_parameters()):
+                ax.plot(pearson, label=np[0])
+                ax.set_xlabel('iter'); ax.set_ylabel('Pearson')
+                ax.legend()
+        fig.suptitle('Correlation between teacher and student parameters')
+        fig.tight_layout()
+        
