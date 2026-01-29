@@ -46,7 +46,7 @@ class Tree:
         self.ancestors_flat, self.offset, self.length = store_ancestors(parent)
 
     def ancestors_of(self, v):  # returns a torch vector with v and its ancestors
-        assert(v < self.get_n_nodes()), f"v={v}"
+        assert(v < self.get_n_nodes()), f"Queried ancestors of node v={v}, but node indices are 0:{self.get_n_nodes()-1}"
         return self.ancestors_flat[self.offset[v] : self.offset[v] + self.length[v]]
 
     def get_n_nodes(self):   # excluding the root

@@ -57,7 +57,7 @@ class Potts(EnergyModel):
         if len(sz_h) != 2:
             raise ValueError(f"Expected tensor with 2 dimensions, got {len(sz_h)}.")
         if len(sz_J) != 4:
-            raise ValueError(f"Expected tensor with 2 dimensions, got {len(sz_J)}.")
+            raise ValueError(f"Expected tensor with 4 dimensions, got {len(sz_J)}.")
         if not (sz_J[0:2] == sz_J[2:4] == sz_h):
             raise ValueError("Wrong tensor dimensions")
         
