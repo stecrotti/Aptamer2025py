@@ -109,7 +109,7 @@ def train(
     epochs = 0   
     converged = (epochs > max_epochs)
     for callback in callbacks:
-        callback.before_training(max_epochs=max_epochs)
+        callback.before_training(model=model, max_epochs=max_epochs)
 
     model.train()  
     while not converged:
