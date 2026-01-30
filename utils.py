@@ -4,8 +4,8 @@ import numpy as np
 from Bio import SeqIO
 import gzip
 from pathlib import Path
-import adabmDCA
 from adabmDCA.fasta import get_tokens, encode_sequence
+import sklearn
 
 # copied from adabmDCA
 def _one_hot(x: torch.Tensor, num_classes: int = -1, dtype: torch.dtype = torch.float32) -> torch.Tensor:
@@ -299,3 +299,38 @@ def set_zerosum_gauge(J, h, mask=None):
     h -= h.mean(dim=1, keepdim=True)
 
     return J, h
+
+def random_data(n_sequences, L, q):
+    x_ = torch.randint(q, (n_sequences, L))
+    return one_hot(x_)
+
+def compute_pca(*sequences_oh, n_components=2):
+    pca = None
+    pcs = []
+    for seq in sequences_oh:
+        xflat = seq.reshape(seq.shape[0], -1)
+        scaler = sklearn.preprocessing.StandardScaler()
+        scaler.fit(xflat)
+        xflat_normalized = scaler.transform(xflat)
+        if pca is None:
+            pca = sklearn.decomposition.PCA(n_components=n_components)
+        pca.fit(xflat_normalized)
+        pcs.append(pca.transform(xflat_normalized))
+    if len(pcs)==1:
+        return pcs[0]
+    else:
+        return tuple(pcs)
+    
+def rand_coupling_matrix(L, q, device=None, dtype=None, rescaling = None):
+    if device is None:
+        device = torch.device('cpu')
+    if dtype is None:
+        dtype = torch.float32
+    if rescaling is None:
+        rescaling = L ** (-0.5)
+
+    J_ = torch.randn(L*q, L*q, dtype=dtype)
+    J_ = (J_ + J_.t()) / 2
+    J = J_.reshape(L, q, L, q) * rescaling
+
+    return J

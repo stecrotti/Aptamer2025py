@@ -33,11 +33,12 @@ class ConvergenceMetricsCallback(Callback):
         self.slope = []
         self.grad_norm = []
         self.log_likelihood = []
-        self.grad_model = []
-        self.grad_data = []
+        self.grad_norm_params = []
+        self.grad_param_ratio = []
+        self.param_names = None
         self.progress_bar = progress_bar
 
-    def before_training(self, max_epochs, *args, **kwargs):
+    def before_training(self, model, max_epochs, *args, **kwargs):
         if self.progress_bar:
             pbar = tqdm(
                 initial=0,
@@ -49,8 +50,9 @@ class ConvergenceMetricsCallback(Callback):
                 bar_format="{desc} {percentage:.2f}%[{bar}] Epoch: {n}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]"
             )
             self.pbar = pbar
+        self.param_names = [name for (name, param) in model.named_parameters()]
 
-    def after_step(self, grad_model, grad_data, grad_total, log_likelihood, epochs, target_pearson, thresh_slope, *args, **kwargs):
+    def after_step(self, model, grad_model, grad_data, grad_total, log_likelihood, epochs, target_pearson, thresh_slope, *args, **kwargs):
         pearson = compute_pearson(grad_model, grad_data)
         slope = compute_slope(grad_model, grad_data)
         grad_vec = torch.nn.utils.parameters_to_vector(grad_total)
@@ -59,8 +61,17 @@ class ConvergenceMetricsCallback(Callback):
         self.slope.append(slope)
         self.grad_norm.append(grad_norm)
         self.log_likelihood.append(log_likelihood)
-        self.grad_model.append(grad_model.detach().clone())
-        self.grad_data.append(grad_data.detach().clone())
+
+        g = []
+        r = []
+        for (grad, param) in zip(grad_total, model.parameters()):
+            ratio = grad.detach().clone().cpu() / param.detach().clone().cpu()
+            norm_ratio = torch.linalg.norm(ratio) / ratio.numel()
+            r.append(norm_ratio)
+            norm = torch.linalg.norm(grad) / grad.numel()
+            g.append(norm)
+        self.grad_param_ratio.append(r)
+        self.grad_norm_params.append(g)
 
         if self.progress_bar:
             self.pbar.n = epochs
@@ -100,6 +111,34 @@ class ConvergenceMetricsCallback(Callback):
         fig.tight_layout()
         
         return fig, axes
+    
+    def plot_gradient_parameter_ratio(self, figsize=(10,3)):
+        fig, ax = plt.subplots(figsize=figsize)
+        names = self.param_names
+
+        for (name, norm) in zip(names, zip(*self.grad_param_ratio)):
+            ax.plot(norm, label=name)
+        ax.legend()
+        ax.set_ylabel('||grad p / p|| / numel(p)')
+        ax.set_xlabel('iter')
+        ax.set_title('Norm of gradient divided by parameter value (average per parameter)')
+        fig.tight_layout()
+        ax.set_yscale('log')
+        return fig, ax
+    
+    def plot_parameter_norm(self, figsize=(10,3)):
+        fig, ax = plt.subplots(figsize=figsize)
+        names = self.param_names
+
+        for (name, norm) in zip(names, zip(*self.grad_norm_params)):
+            ax.plot(norm, label=name)
+        ax.legend()
+        ax.set_ylabel('||grad p|| / numel(p)')
+        ax.set_xlabel('iter')
+        ax.set_title('Norm of gradient (average per parameter)')
+        fig.tight_layout()
+        ax.set_yscale('log')
+        return fig, ax
     
 def compute_potts_covariance(model, grad_model, grad_data):
     fi = grad_data[1]
@@ -185,6 +224,7 @@ class TeacherStudentCallback(Callback):
         pearson_Ns0 = zip(*self.pearson_Ns0)
         for (pearson, np) in zip(pearson_Ns0, self.model_teacher.round_zero.named_parameters()):
             ax.plot(pearson, label=np[0])
+            ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
             ax.set_xlabel('iter'); ax.set_ylabel('Pearson')
             ax.legend()
         
@@ -195,6 +235,7 @@ class TeacherStudentCallback(Callback):
             ax.set_title(f'ps - mode #{i}')
             for (pearson, np) in zip(zip(*pearson_mode), self.model_teacher.selection.modes[i].named_parameters()):
                 ax.plot(pearson, label=np[0])
+                ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
                 ax.set_xlabel('iter'); ax.set_ylabel('Pearson')
                 ax.legend()
         fig.suptitle('Correlation between teacher and student parameters')
