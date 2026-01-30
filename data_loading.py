@@ -45,3 +45,25 @@ class SelexRoundDataLoader:
         idx = perm[:self.batch_size]
         return self.seq_oh[idx].to(self.device)
     
+    def __iter__(self):
+        return SelexRoundDataLoaderIterator(data_loader=self)
+
+class SelexRoundDataLoaderIterator:
+    def __init__(self, data_loader):
+        self.data_loader = data_loader
+        nseq = self.data_loader.seq_oh.shape[0]
+        self.perm = torch.randperm(nseq, generator=data_loader.generator).to(self.data_loader.seq_oh.device)
+        self.count = 0
+        self.max_count = nseq // self.data_loader.batch_size
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.count >= self.max_count:
+            raise StopIteration
+        bs = self.data_loader.batch_size
+        idx = self.perm[self.count * bs : (self.count + 1) * bs]
+        batch = self.data_loader.seq_oh[idx].to(self.data_loader.device)
+        self.count += 1
+        return batch

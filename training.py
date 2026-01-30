@@ -113,35 +113,34 @@ def train(
 
     model.train()  
     while not converged:
-        optimizer.zero_grad()
-        L_model = L_data = 0
-        log_likelihood = 0.0
-        for t in ts:
-            # update chains and log weights for estimate of normalization
-            with torch.no_grad():
-                energy_model_t = update_chains(chains, t, model, n_sweeps)
-                log_weights[t] += energies_AIS[t] - energy_model_t
-                energies_AIS[t] = energy_model_t
-            # compute gradient
-            L_m = compute_moments_model_at_round(model, chains[t].clone(), t)
-            L_model = L_model + normalized_total_reads[t] * L_m
-            
-            # extract batch of data from round t
-            data_batch = data_loaders[t].get_batch()
-            L_d = compute_moments_data_at_round(model, data_batch, t)
-            L_data = L_data + normalized_total_reads[t] * L_d
-            logZt = Llogq + (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
-            Lt = L_d.detach().clone() - logZt
-            log_likelihood += (normalized_total_reads[t] * Lt).item()
-        
-            # TODO: compute round-wise convergence metrics
+        for batches in zip(*[iter(dl) for dl in data_loaders]):
+            optimizer.zero_grad()
+            L_model = L_data = 0
+            log_likelihood = 0.0
+            for t in ts:
+                # update chains and log weights for estimate of normalization
+                with torch.no_grad():
+                    energy_model_t = update_chains(chains, t, model, n_sweeps)
+                    log_weights[t] += energies_AIS[t] - energy_model_t
+                    energies_AIS[t] = energy_model_t
+                # compute gradient
+                L_m = compute_moments_model_at_round(model, chains[t].clone(), t)
+                L_model = L_model + normalized_total_reads[t] * L_m
+                
+                # extract batch of data from round t
+                data_batch = batches[t]
+                L_d = compute_moments_data_at_round(model, data_batch, t)
+                L_data = L_data + normalized_total_reads[t] * L_d
+                logZt = Llogq + (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
+                Lt = L_d.detach().clone() - logZt
+                log_likelihood += (normalized_total_reads[t] * Lt).item()
 
-        # Compute gradient
-        grad_model = compute_grad_model(model, L_model, retain_graph=True)
-        grad_data = compute_grad_data(model, L_data, retain_graph=False)
-        grad_total = compute_total_gradient(model, grad_model, grad_data)
-        # do gradient step on params
-        optimizer.step()
+            # Compute gradient
+            grad_model = compute_grad_model(model, L_model, retain_graph=True)
+            grad_data = compute_grad_data(model, L_data, retain_graph=False)
+            grad_total = compute_total_gradient(model, grad_model, grad_data)
+            # do gradient step on params
+            optimizer.step()
 
         epochs += 1
         converged = (epochs > max_epochs)
@@ -154,5 +153,8 @@ def train(
                          grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
                          target_pearson=target_pearson, thresh_slope=thresh_slope)
             converged = converged or c
+
+            epochs += 1
+            converged = (epochs > max_epochs)
 
     model.zero_grad()
