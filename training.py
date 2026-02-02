@@ -149,6 +149,7 @@ def train(
         # callbacks
         for callback in callbacks:
             c = callback.after_step(model=model, chains=chains, total_reads=total_reads, 
+                         data_loaders=data_loaders,
                          log_likelihood = log_likelihood, epochs=epochs,
                          grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
                          target_pearson=target_pearson, thresh_slope=thresh_slope)

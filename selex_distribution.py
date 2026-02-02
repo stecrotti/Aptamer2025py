@@ -70,21 +70,24 @@ class MultiRoundDistribution(torch.nn.Module):
             self.selection_strength = torch.nn.Parameter(selection_strength)
         else:
             self.selection_strength = selection_strength
+        self.learn_selection_strength = learn_selection_strength
 
     # compute $\log p_{st}
     def selection_energy_at_round(self, x, t):
         if t == 0:
             return torch.zeros(x.size(0))
+        normalized_selection_strength = self.selection_strength / self.selection_strength.sum(0, keepdim=True)
         return self.selection.compute_energy(x, selected=self.selected_modes[t-1:t], 
-                                             selection_strength=self.selection_strength[t-1:t])
+                                             selection_strength=normalized_selection_strength[t-1:t])
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau}
     def selection_energy_up_to_round(self, x, t):
         if t == 0:
             return torch.zeros(x.size(0), device=x.device)
         ancestors = self.tree.ancestors_of(t-1)
+        normalized_selection_strength = self.selection_strength / self.selection_strength.sum(0, keepdim=True)
         return self.selection.compute_energy(x, selected=self.selected_modes[ancestors],
-                                             selection_strength=self.selection_strength[ancestors])
+                                             selection_strength=normalized_selection_strength[ancestors])
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau} + logNs0
     def compute_energy_up_to_round(self, x, t):
@@ -108,7 +111,8 @@ class MultiRoundDistribution(torch.nn.Module):
         self.tree.offset = fn(self.tree.offset)
         self.tree.length = fn(self.tree.length)
         self.selected_modes = fn(self.selected_modes)
-        self.selection_strength = fn(self.selection_strength)
+        if not self.learn_selection_strength:
+            self.selection_strength = fn(self.selection_strength)
         
         return self
 
