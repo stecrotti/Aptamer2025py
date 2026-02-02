@@ -2,16 +2,13 @@ import torch
 import matplotlib.pyplot as plt
 from tqdm.autonotebook import tqdm
 import energy_models
+import IPython
 
 
-def compute_pearson(grad_model, grad_data):
-    x = torch.nn.utils.parameters_to_vector(grad_model)
-    y = torch.nn.utils.parameters_to_vector(grad_data)
+def compute_pearson(x, y):
     return torch.corrcoef(torch.stack([x, y]))[0, 1].item()
 
-def compute_slope(grad_model, grad_data):
-    x = torch.nn.utils.parameters_to_vector(grad_model)
-    y = torch.nn.utils.parameters_to_vector(grad_data)
+def compute_slope(x, y):
     n = len(x)
     num = n * (x @ y) - y.sum() * x.sum()
     den = n * (x @ x) - torch.square(x.sum())
@@ -27,7 +24,7 @@ class Callback:
         return False
 
 class ConvergenceMetricsCallback(Callback):
-    def __init__(self, progress_bar=True):
+    def __init__(self, progress_bar=True, progress_plot=False):
         super().__init__()
         self.pearson = []
         self.slope = []
@@ -37,6 +34,7 @@ class ConvergenceMetricsCallback(Callback):
         self.grad_param_ratio = []
         self.param_names = None
         self.progress_bar = progress_bar
+        self.progress_plot = progress_plot
 
     def before_training(self, model, max_epochs, *args, **kwargs):
         if self.progress_bar:
@@ -51,10 +49,36 @@ class ConvergenceMetricsCallback(Callback):
             )
             self.pbar = pbar
         self.param_names = [name for (name, param) in model.named_parameters()]
+        if self.progress_plot:
+            fig, axes = plt.subplots(1, 4)
+            self.fig = fig
+            self.axes = axes
+            
+            ax = axes[0]
+            ax.set_yscale('log')
+            ax.set_xlabel('iter')
+            ax.set_ylabel('|1-pearson|')
+
+            ax = axes[1]
+            ax.set_yscale('log')
+            ax.set_xlabel('iter')
+            ax.set_ylabel('|1-slope|')
+
+            ax = axes[2]
+            ax.set_yscale('log')
+            ax.set_xlabel('iter')
+            ax.set_ylabel('|| grad logL ||')
+
+            ax = axes[3]
+            ax.set_xlabel('iter')
+            ax.set_ylabel('NLL')
 
     def after_step(self, model, grad_model, grad_data, grad_total, log_likelihood, epochs, target_pearson, thresh_slope, *args, **kwargs):
-        pearson = compute_pearson(grad_model, grad_data)
-        slope = compute_slope(grad_model, grad_data)
+        
+        x = torch.nn.utils.parameters_to_vector(grad_model)
+        y = torch.nn.utils.parameters_to_vector(grad_data)
+        pearson = compute_pearson(x, y)
+        slope = compute_slope(x, y)
         grad_vec = torch.nn.utils.parameters_to_vector(grad_total)
         grad_norm = (torch.sqrt(torch.square(grad_vec).sum()) / len(grad_vec)).item()
         self.pearson.append(pearson)
@@ -77,6 +101,14 @@ class ConvergenceMetricsCallback(Callback):
             self.pbar.n = epochs
             self.pbar.set_description(f"Epoch {epochs}, Pearson = {pearson:.4e}, Gradient norm = {grad_norm:.4e}, NLL = {-log_likelihood:.4e}")
         
+        if self.progress_plot:
+            self.axes[0].plot([abs(1-p) for p in self.pearson])
+            self.axes[1].plot([abs(1-p) for p in self.slope])
+            self.axes[2].plot(self.grad_norm)
+            self.axes[3].plot([-nll for nll in self.log_likelihood])
+            self.fig.tight_layout()
+            IPython.display.display(self.fig, clear=True)
+
         c1 = pearson > target_pearson
         c2 = abs(slope - 1.) < thresh_slope
 
@@ -184,8 +216,10 @@ class TeacherStudentCallback(Callback):
         self.model_teacher = model_teacher
         self.pearson_Ns0 = []
         self.pearson_ps = []
+        self.pearson_energies = []
+        self.slope_energies = []
 
-    def after_step(self, model, *args, **kwargs):
+    def after_step(self, model, data_loaders, *args, **kwargs):
         model_teacher = self.model_teacher
         model_student = model
         Ns0_teacher = model_teacher.round_zero
@@ -215,7 +249,21 @@ class TeacherStudentCallback(Callback):
             pearson_ps_round.append(pearson_ps_mode)
         self.pearson_ps.append(pearson_ps_round)
 
-    def plot(self, figsize=(10, 4)):
+        pearson_energy = []
+        slope_energy = []
+        for t in range(model.get_n_rounds()):
+            x = data_loaders[t].get_batch()
+            en_teacher = self.model_teacher.compute_energy_up_to_round(x, t).detach()
+            en_student = model.compute_energy_up_to_round(x, t).detach()
+            p = compute_pearson(en_teacher, en_student)
+            s = compute_slope(en_teacher, en_student)
+            pearson_energy.append(p)
+            slope_energy.append(s)
+        self.pearson_energies.append(pearson_energy)
+        self.slope_energies.append(slope_energy)
+
+
+    def plot_parameters(self, figsize=(10, 4)):
         n_selection_modes = self.model_teacher.selection.get_n_modes()
         fig, axes = plt.subplots(1, n_selection_modes + 1, figsize=figsize)
 
@@ -240,4 +288,24 @@ class TeacherStudentCallback(Callback):
                 ax.legend()
         fig.suptitle('Correlation between teacher and student parameters')
         fig.tight_layout()
+
+    def plot_energies(self, figsize=(10, 4)):
+        n_rounds = self.model_teacher.get_n_rounds()
+        fig, axes = plt.subplots(1, n_rounds, figsize=figsize)
+
+        pearson_energy = list(zip(*self.pearson_energies))
+        slope_energy = list(zip(*self.slope_energies))
+        for t in range(n_rounds):
+            ax = axes[t]
+            ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
+            ax.plot([abs(1-p) for p in pearson_energy[t]], label='|1-Pearson|')
+            ax.plot([abs(1-s) for s in slope_energy[t]], label='|1-Slope|')
+            ax.set_title(f'Round t={t}')
+            ax.set_xlabel('iter')
+            ax.set_yscale('log')
+            ax.legend()
+        fig.suptitle('Correlation between teacher and student energies on random batch')
+        fig.tight_layout()
         
+    def plot(self, **kwargs):
+        return self.plot_parameters(**kwargs)
