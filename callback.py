@@ -218,8 +218,11 @@ class TeacherStudentCallback(Callback):
         self.pearson_ps = []
         self.pearson_energies = []
         self.slope_energies = []
+        # TODO: get rid of this
+        self.gradalpha = []
+        self.alpha = []
 
-    def after_step(self, model, data_loaders, *args, **kwargs):
+    def after_step(self, model, data_loaders, grad_total, *args, **kwargs):
         model_teacher = self.model_teacher
         model_student = model
         Ns0_teacher = model_teacher.round_zero
@@ -262,6 +265,10 @@ class TeacherStudentCallback(Callback):
         self.pearson_energies.append(pearson_energy)
         self.slope_energies.append(slope_energy)
 
+        gradalpha = grad_total[0].detach().clone().cpu()
+        self.gradalpha.append(gradalpha)
+        self.alpha.append(next(model.parameters()).detach().clone().cpu())
+
 
     def plot_parameters(self, figsize=(10, 4)):
         n_selection_modes = self.model_teacher.selection.get_n_modes()
@@ -288,6 +295,8 @@ class TeacherStudentCallback(Callback):
                 ax.legend()
         fig.suptitle('Correlation between teacher and student parameters')
         fig.tight_layout()
+        
+        return fig, axes
 
     def plot_energies(self, figsize=(10, 4)):
         n_rounds = self.model_teacher.get_n_rounds()
@@ -298,14 +307,15 @@ class TeacherStudentCallback(Callback):
         for t in range(n_rounds):
             ax = axes[t]
             ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
-            ax.plot([abs(1-p) for p in pearson_energy[t]], label='|1-Pearson|')
-            ax.plot([abs(1-s) for s in slope_energy[t]], label='|1-Slope|')
+            ax.plot(pearson_energy[t], label='Pearson')
+            ax.plot(slope_energy[t], label='Slope')
             ax.set_title(f'Round t={t}')
             ax.set_xlabel('iter')
-            ax.set_yscale('log')
             ax.legend()
-        fig.suptitle('Correlation between teacher and student energies on random batch')
+        fig.suptitle('Correlation between teacher and student logNst on a random batch')
         fig.tight_layout()
+
+        return fig, axes
         
     def plot(self, **kwargs):
         return self.plot_parameters(**kwargs)
