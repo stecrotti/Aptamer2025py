@@ -76,7 +76,8 @@ class MultiRoundDistribution(torch.nn.Module):
     def selection_energy_at_round(self, x, t):
         if t == 0:
             return torch.zeros(x.size(0))
-        normalized_selection_strength = self.selection_strength / self.selection_strength.sum(0, keepdim=True)
+        abs_selection_strength = torch.abs(self.selection_strength)
+        normalized_selection_strength = abs_selection_strength / abs_selection_strength.sum(0, keepdim=True)
         return self.selection.compute_energy(x, selected=self.selected_modes[t-1:t], 
                                              selection_strength=normalized_selection_strength[t-1:t])
 
