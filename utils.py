@@ -329,8 +329,17 @@ def rand_coupling_matrix(L, q, device=None, dtype=None, rescaling = None):
     if rescaling is None:
         rescaling = L ** (-0.5)
 
-    J_ = torch.randn(L*q, L*q, dtype=dtype)
+    J_ = torch.randn(L*q, L*q, dtype=dtype, device=device)
     J_ = (J_ + J_.t()) / 2
     J = J_.reshape(L, q, L, q) * rescaling
 
     return J
+
+def rand_sequences_oh(M, L, q, device=None, dtype=None):
+    if device is None:
+        device = torch.device('cpu')
+    if dtype is None:
+        dtype = torch.float32
+
+    x = torch.randint(q, (M, L))
+    return one_hot(x).to(device=device, dtype=dtype)
