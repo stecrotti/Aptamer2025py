@@ -14,6 +14,11 @@ def compute_slope(x, y):
     den = n * (x @ x) - torch.square(x.sum())
     return torch.abs(num / den).item()
 
+def relative_error(x, y):
+    x = x.reshape(-1)
+    y = y.reshape(-1)
+    return torch.linalg.norm(x - y) / torch.linalg.norm(x)
+
 class Callback:
     pass
 
@@ -218,9 +223,6 @@ class TeacherStudentCallback(Callback):
         self.pearson_ps = []
         self.pearson_energies = []
         self.slope_energies = []
-        # TODO: get rid of this
-        self.gradalpha = []
-        self.alpha = []
 
     def after_step(self, model, data_loaders, grad_total, *args, **kwargs):
         model_teacher = self.model_teacher
@@ -234,8 +236,10 @@ class TeacherStudentCallback(Callback):
         for (param_teacher, param_student) in zip(Ns0_teacher.parameters(), Ns0_student.parameters()):
             x = param_teacher.detach().clone().cpu().reshape(-1)
             y = param_student.detach().clone().cpu().reshape(-1)
-            p = torch.corrcoef(torch.stack([x, y]))[0, 1].item()
-            pearson_Ns0_round.append(p)
+            assert len(x) == len(y)
+            if len(x) > 0:
+                p = compute_pearson(x, y)
+                pearson_Ns0_round.append(p)
         self.pearson_Ns0.append(pearson_Ns0_round)
         
         pearson_ps_round = []
@@ -247,8 +251,10 @@ class TeacherStudentCallback(Callback):
             for (param_teacher, param_student) in zip(mode_teacher.parameters(), mode_student.parameters()):
                 x = param_teacher.detach().clone().cpu().reshape(-1)
                 y = param_student.detach().clone().cpu().reshape(-1)
-                p = torch.corrcoef(torch.stack([x, y]))[0, 1].item()
-                pearson_ps_mode.append(p)
+                assert len(x) == len(y)
+                if len(x) > 0:
+                    p = compute_pearson(x, y)
+                    pearson_ps_mode.append(p)
             pearson_ps_round.append(pearson_ps_mode)
         self.pearson_ps.append(pearson_ps_round)
 
@@ -265,12 +271,8 @@ class TeacherStudentCallback(Callback):
         self.pearson_energies.append(pearson_energy)
         self.slope_energies.append(slope_energy)
 
-        gradalpha = grad_total[0].detach().clone().cpu()
-        self.gradalpha.append(gradalpha)
-        self.alpha.append(next(model.parameters()).detach().clone().cpu())
 
-
-    def plot_parameters(self, figsize=(10, 4)):
+    def plot_pearson_parameters(self, figsize=(10, 4)):
         n_selection_modes = self.model_teacher.selection.get_n_modes()
         fig, axes = plt.subplots(1, n_selection_modes + 1, figsize=figsize)
 
@@ -298,7 +300,7 @@ class TeacherStudentCallback(Callback):
         
         return fig, axes
 
-    def plot_energies(self, figsize=(10, 4)):
+    def plot_pearson_energies(self, figsize=(10, 4)):
         n_rounds = self.model_teacher.get_n_rounds()
         fig, axes = plt.subplots(1, n_rounds, figsize=figsize)
 
@@ -318,4 +320,25 @@ class TeacherStudentCallback(Callback):
         return fig, axes
         
     def plot(self, **kwargs):
-        return self.plot_parameters(**kwargs)
+        return self.plot_pearson_parameters(**kwargs)
+    
+class ConstEnergyCallback(Callback):
+    def __init__(self, model_teacher):
+        super().__init__()
+        self.model_teacher = model_teacher
+        self.err = []
+
+    def after_step(self, model, *args, **kwargs):
+        en_teacher = self.model_teacher.selection.modes[-1].en
+        en_student = model.selection.modes[-1].en
+        self.err.append(relative_error(en_teacher, en_student).item())
+
+    def plot(self, **kwargs):
+        fig, ax = plt.subplots(**kwargs)
+        ax.plot(self.err)
+        ax.set_xlabel('iter')
+        ax.set_ylabel('relative err')
+        ax.set_title('Relative error on constant energy for unbounded mode')
+        fig.tight_layout()
+
+        return fig, ax
