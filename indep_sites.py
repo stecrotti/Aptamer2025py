@@ -1,9 +1,16 @@
 import torch
 from typing import Dict, Tuple, Any, List
 from tqdm.autonotebook import tqdm
-from utils import normalize_to_logprob, normalize_to_prob, set_zerosum_gauge
+import utils
 from adabmDCA.functional import one_hot
 
+def set_zerosum_gauge(params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    params = {key: value.clone() for key, value in params.items()}
+    params['bias_Ns0'] -= params['bias_Ns0'].mean(1, keepdim=True)
+    params['bias_ps'] -= params['bias_ps'].mean(1, keepdim=True)
+    
+    return params
+    
 def init_parameters(fi: torch.Tensor) -> Dict[str, torch.Tensor]:
     _, L, q = fi.shape
     params = {}
@@ -27,6 +34,7 @@ def get_params_at_round(
     return params_t
 
 def compute_logNst(sequences, params, params_Ns0 = None):
+    # optionally pass Ns0 parameters trained somewhere else, like on a different dataset
     if params_Ns0 is None:
         params_Ns0 = params
 
@@ -146,7 +154,7 @@ def train(
         # Store the previous parameters
         params_prev = {key: value.clone() for key, value in params.items()}
         ts = torch.arange(len(total_reads))
-        pi = torch.stack([normalize_to_prob(
+        pi = torch.stack([utils.normalize_to_prob(
                     get_params_at_round(params, t)["bias"].exp()
                     )
                     for t in ts])
