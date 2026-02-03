@@ -153,5 +153,9 @@ def train(
                             grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
                          target_pearson=target_pearson, thresh_slope=thresh_slope)
             converged = converged or c
+            
+            if converged:
+                model.zero_grad()
+                return
 
     model.zero_grad()
