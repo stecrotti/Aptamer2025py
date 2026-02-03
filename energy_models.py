@@ -1,6 +1,7 @@
 import torch
 from selex_distribution import EnergyModel
 import utils
+import numbers
 
 class IndepSites(EnergyModel):
     def __init__(
@@ -117,18 +118,22 @@ class InfiniteEnergy(EnergyModel):
             raise ValueError(f"Expected tensor `x` of dimension either 2 or 3, got {x.dim()}")
 
 class ConstantEnergy(EnergyModel):
-    def __init__(self, en = 0.0):
+    def __init__(self, en: numbers.Number = 0.0, learnable=False):
         super().__init__()
-        self.en = en
+        en = torch.tensor(en)
+        self.learnable = learnable
+        self.en = torch.nn.Parameter(en)
+        if not learnable:
+            self.en.requires_grad = False
 
     def compute_energy(
         self,
         x: torch.Tensor
     ):
         if x.dim() == 2:
-            return torch.full((1,), self.en).to(dtype=x.dtype, device=x.device)
+            return self.en.clone()
         elif x.dim() == 3:
-            return torch.full((x.size(0),), self.en).to(dtype=x.dtype, device=x.device)
+            return self.en.repeat(x.size(0))
         else:
             raise ValueError(f"Expected tensor `x` of dimension either 2 or 3, got {x.dim()}")
 
