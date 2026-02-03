@@ -3,16 +3,7 @@ import matplotlib.pyplot as plt
 from tqdm.autonotebook import tqdm
 import energy_models
 import IPython
-
-
-def compute_pearson(x, y):
-    return torch.corrcoef(torch.stack([x, y]))[0, 1].item()
-
-def compute_slope(x, y):
-    n = len(x)
-    num = n * (x @ y) - y.sum() * x.sum()
-    den = n * (x @ x) - torch.square(x.sum())
-    return torch.abs(num / den).item()
+from utils import compute_pearson, compute_slope
 
 def relative_error(x, y):
     x = x.reshape(-1)
