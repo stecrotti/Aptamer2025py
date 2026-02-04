@@ -3,6 +3,7 @@ from utils import one_hot
 import selex_distribution
 from callback import ConvergenceMetricsCallback
 import sampling
+import copy
 
 def init_chains(
     n_rounds: int,
@@ -97,6 +98,7 @@ def train(
 
     log_n_chains = torch.log(torch.tensor(n_chains, device=device, dtype=dtype)).item()
     energies_AIS = [model.compute_energy_up_to_round(chains[t], t) for t in ts]
+    model_prev = copy.deepcopy(model)
     Llogq = L * torch.log(torch.tensor(q, device=device, dtype=dtype)).item()
 
     if optimizer is None:
@@ -120,9 +122,7 @@ def train(
             for t in ts:
                 # update chains and log weights for estimate of normalization
                 with torch.no_grad():
-                    energy_model_t = update_chains(chains, t, model, n_sweeps)
-                    log_weights[t] += energies_AIS[t] - energy_model_t
-                    energies_AIS[t] = energy_model_t
+                    energies_AIS[t] = update_chains(chains, t, model, n_sweeps)
                 # compute gradient
                 L_m = compute_moments_model_at_round(model, chains[t].clone(), t)
                 L_model = L_model + normalized_total_reads[t] * L_m
@@ -142,8 +142,15 @@ def train(
             # do gradient step on params
             optimizer.step()
 
+            # update logweights for importance sampling estimate of Z
+            for t in ts:
+                energy_prev = model_prev.compute_energy_up_to_round(chains[t], t)
+                log_weights[t] += energy_prev - energies_AIS[t]
+            model_prev = copy.deepcopy(model)
+
             epochs += 1
             converged = (epochs > max_epochs)
+
 
             # callbacks
             for callback in callbacks:
