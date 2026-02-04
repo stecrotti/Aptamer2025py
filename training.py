@@ -78,14 +78,14 @@ def train(
     data_loaders,
     total_reads,
     chains: torch.Tensor,
-    n_sweeps: int,
-    lr: float,    
+    n_sweeps: int,   
     max_epochs: int,
-    target_pearson = 0.999,
+    target_pearson = 0.99,
     thresh_slope = 1e-2,
     l2reg: float = 0.0,
     log_weights: torch.Tensor | None = None,
     optimizer = None,
+    lr = 1e-2, 
     callbacks = [ConvergenceMetricsCallback()],
     update_chains = update_chains_default()
 ):
@@ -151,11 +151,10 @@ def train(
             epochs += 1
             converged = (epochs > max_epochs)
 
-
             # callbacks
             for callback in callbacks:
                 c = callback.after_step(model=model, chains=chains, total_reads=total_reads, 
-                            data_loaders=data_loaders,
+                            data_loaders=data_loaders, model_prev=model_prev,
                             log_likelihood = log_likelihood, epochs=epochs,
                             grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
                          target_pearson=target_pearson, thresh_slope=thresh_slope)
