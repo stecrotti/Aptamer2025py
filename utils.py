@@ -6,6 +6,9 @@ import gzip
 from pathlib import Path
 from adabmDCA.fasta import get_tokens, encode_sequence
 import sklearn
+import glob
+
+TOKENS_PROTEIN = "*ACDEFGHIKLMNPQRSTVWY"
 
 # copied from adabmDCA
 def _one_hot(x: torch.Tensor, num_classes: int = -1, dtype: torch.dtype = torch.float32) -> torch.Tensor:
@@ -175,6 +178,34 @@ def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):
         dim=0)
 
     return seq
+
+def sequences_from_file_ab6(round_id: str, device: torch.device = torch.device('cpu')):
+    dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve() 
+    files = glob.glob(f"*_{round_id}_aa.txt", root_dir=dirpath)
+    nf = len(files)
+    if nf != 1:
+        raise ValueError(f"Expected round id {round_id} to match 1 file, got {nf} matches: {files}")
+    filepath = files[0]
+    sequences = []
+    counts = []
+    with open(dirpath / filepath) as file:
+        for line in file:
+            spl = line.split('\t')
+            sequence = spl[0]
+            count = spl[1]
+            if len(sequence) == 6:
+                sequences.append(sequence)
+                counts.append(int(count))
+
+    sequences = encode_sequence(sequences, TOKENS_PROTEIN)
+
+    seq = torch.repeat_interleave(
+        torch.tensor(sequences, device=device, dtype=torch.int32), 
+        torch.tensor(counts, device=device, dtype=torch.int32), 
+        dim=0)
+
+    return seq
+    
 
 @torch.jit.script
 def get_count_single_point(
