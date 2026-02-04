@@ -69,7 +69,7 @@ class Potts(EnergyModel):
         # set the (i,i) blocks to zero
         mask[torch.arange(L), :, torch.arange(L), :] = 0
         self.J = torch.nn.Parameter(J)
-        # self.mask = mask
+
         # so that mask is not trained, but automatically moved to gpu with the rest of the model
         self.register_buffer('mask', mask)
 
@@ -122,18 +122,19 @@ class ConstantEnergy(EnergyModel):
         super().__init__()
         en = torch.tensor(en)
         self.learnable = learnable
-        self.en = torch.nn.Parameter(en)
-        if not learnable:
-            self.en.requires_grad = False
-
+        if learnable:
+            self.en = torch.nn.Parameter(en)
+        else:
+            self.register_buffer('en', en)
+            
     def compute_energy(
         self,
         x: torch.Tensor
     ):
         if x.dim() == 2:
-            return self.en.clone()
+            return self.en.clone().to(x.device)
         elif x.dim() == 3:
-            return self.en.repeat(x.size(0))
+            return self.en.repeat(x.size(0)).to(x.device)
         else:
             raise ValueError(f"Expected tensor `x` of dimension either 2 or 3, got {x.dim()}")
 
