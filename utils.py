@@ -343,3 +343,17 @@ def rand_sequences_oh(M, L, q, device=None, dtype=None):
 
     x = torch.randint(q, (M, L))
     return one_hot(x).to(device=device, dtype=dtype)
+
+
+def compute_pearson(x, y):
+    x = x.reshape(-1)
+    y = y.reshape(-1)
+    return torch.corrcoef(torch.stack([x, y]))[0, 1].item()
+
+def compute_slope(x, y):
+    x = x.reshape(-1)
+    y = y.reshape(-1)
+    n = len(x)
+    num = n * (x @ y) - y.sum() * x.sum()
+    den = n * (x @ x) - torch.square(x.sum())
+    return torch.abs(num / den).item()
