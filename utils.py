@@ -316,20 +316,25 @@ def zerosum_gauge_couplings(coupling_matrix):
                             coupling_matrix.mean(dim=(1, 3), keepdim=True)
     return coupling_matrix
 
-def set_zerosum_gauge(J, h, mask=None):
-    L, q = h.shape
+def set_zerosum_gauge(J, h=None, mask=None):
+    L, q = J.shape[:2]
     if mask is None:
         mask = torch.ones(L, q, L, q, device=J.device)
         mask[torch.arange(L), :, torch.arange(L), :] = 0
     Jmasked = J * mask
 
-    dh = 0.5 * (Jmasked.mean(3).sum(2) + Jmasked.mean(1).sum(0) + Jmasked.mean(3).mean(1, keepdim=True).sum(2))
+    if h is not None:
+        dh = 0.5 * (Jmasked.mean(3).sum(2) + Jmasked.mean(1).sum(0) + Jmasked.mean(3).mean(1, keepdim=True).sum(2))
+    
     dJ = Jmasked.mean(3, keepdim=True) + Jmasked.mean(1, keepdim=True) + Jmasked.mean((1,3), keepdim=True)
     J -= dJ
-    h += dh
-    h -= h.mean(dim=1, keepdim=True)
 
-    return J, h
+    if h is not None:
+        h += dh
+        h -= h.mean(dim=1, keepdim=True)
+        return J, h
+
+    return J
 
 def random_data(n_sequences, L, q):
     x_ = torch.randint(q, (n_sequences, L))
