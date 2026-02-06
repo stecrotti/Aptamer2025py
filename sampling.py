@@ -1,6 +1,8 @@
 import torch
 from tqdm.autonotebook import tqdm
 from adabmDCA.dca import get_seqid_stats
+import matplotlib.pyplot as plt
+import numpy as np
 
 def _sample_metropolis(model, chains, t, n_steps, beta = 1.0):
     B, L, q = chains.shape
@@ -49,7 +51,8 @@ def compute_mixing_time(
     t,
     data: torch.Tensor,
     n_max_sweeps: int,
-    beta: float,
+    beta: float = 1.0,
+    pbar_desc: str = "Iterating until mixing time is reached"
 ):
     """Computes the mixing time using the t and t/2 method. The sampling will halt when the mixing time is reached or
     the limit of `n_max_sweeps` sweeps is reached.
@@ -74,7 +77,7 @@ def compute_mixing_time(
 
     torch.manual_seed(0)
     
-    n_chains, L, q = data.size()
+    n_rounds, n_chains, L, q = data.size()
     # Initialize chains at random
     sample_t = data
     # Copy sample_t to a new variable sample_t_half
@@ -97,7 +100,7 @@ def compute_mixing_time(
         leave=False,
         ascii="-#",
     )
-    pbar.set_description("Iterating until the mixing time is reached")
+    pbar.set_description(pbar_desc)
         
     for i in range(1, n_max_sweeps + 1):
         pbar.update(1)
@@ -115,12 +118,12 @@ def compute_mixing_time(
             # sample_t_half = sampler(chains=sample_t_half, params=params, nsweeps=1, beta=beta)
 
             # Calculate the average distance between sample_t and itself shuffled
-            perm = torch.randperm(len(sample_t), device=sample_t.device)
-            seqid_t, std_seqid_t = get_seqid_stats(sample_t, sample_t[perm])
+            perm = torch.randperm(len(sample_t[t]), device=sample_t.device)
+            seqid_t, std_seqid_t = get_seqid_stats(sample_t[t], sample_t[t][perm])
             seqid_t, std_seqid_t = seqid_t / L, std_seqid_t / L
 
             # Calculate the average distance between sample_t and sample_t_half
-            seqid_t_t_half, std_seqid_t_t_half = get_seqid_stats(sample_t, sample_t_half)
+            seqid_t_t_half, std_seqid_t_t_half = get_seqid_stats(sample_t[t], sample_t_half[t])
             seqid_t_t_half, std_seqid_t_t_half = seqid_t_t_half / L, std_seqid_t_t_half / L
 
             # Store the results
@@ -140,3 +143,41 @@ def compute_mixing_time(
     pbar.close()
 
     return results
+
+def compute_and_plot_mixing_time(model, chains, n_max_sweeps = 10**3):
+    n_rounds, n_chains, L, q = chains.size()
+    res = []
+    for t in range(n_rounds):
+        res_t = compute_mixing_time(model, t, chains, n_max_sweeps, 
+                                    pbar_desc = f"Computing mixing time for round {t}")
+        res.append(res_t)
+
+    fig, axes = plt.subplots(1, n_rounds, figsize=(12,4))
+    for t in range(n_rounds):
+        ax = axes[t]
+        results = res[t]
+        
+        ax.plot(results["t_half"], results["seqid_t"], label=r"SeqID$(t)$", color="#002CFF")  # Blue
+        ax.fill_between(results["t_half"],
+                        np.array(results["seqid_t"]) - np.array(results["std_seqid_t"]),
+                        np.array(results["seqid_t"]) + np.array(results["std_seqid_t"]),
+                        color="#002CFF", alpha=0.2)
+        ax.plot(results["t_half"], results["seqid_t_t_half"], label=r"SeqID$(t, t/2)$", color="#67BAA6")  # Orange
+        ax.fill_between(results["t_half"],
+                        np.array(results["seqid_t_t_half"]) - np.array(results["std_seqid_t_t_half"]),
+                        np.array(results["seqid_t_t_half"]) + np.array(results["std_seqid_t_t_half"]),
+                        color="#67BAA6", alpha=0.2)
+        ax.set_xlabel(r"$t/2$ (Sweeps)")
+        ax.set_ylabel("Sequence Identity")
+        ax.legend(loc='upper right')
+        ax.set_title(f"Round {t}")
+        fig.suptitle("Mixing time")
+        
+        # Add annotation for mixing time
+        ax.annotate(r"$t^{\mathrm{mix}}=$" + f"{results['t_half'][-1]}", xy=(0.96, 0.7), xycoords='axes fraction', fontsize=15,
+                    verticalalignment='top', horizontalalignment='right', bbox=dict(facecolor='white', alpha=0.5))
+    fig.tight_layout()
+
+    mixing_times = [results['t_half'][-1] for results in res]
+
+    return mixing_times, fig
