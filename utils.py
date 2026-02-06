@@ -179,8 +179,9 @@ def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):
 
     return seq
 
-def sequences_from_file_ab6(round_id: str, device: torch.device = torch.device('cpu')):
-    dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve() 
+def sequences_uniques_counts_from_file_ab6(round_id: str, 
+                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve(),
+                            device: torch.device = torch.device('cpu')):
     files = glob.glob(f"*_{round_id}_aa.txt", root_dir=dirpath)
     nf = len(files)
     if nf != 1:
@@ -198,6 +199,13 @@ def sequences_from_file_ab6(round_id: str, device: torch.device = torch.device('
                 counts.append(int(count))
 
     sequences = encode_sequence(sequences, TOKENS_PROTEIN)
+
+    return sequences, counts
+
+def sequences_from_file_ab6(round_id: str, 
+                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve(),
+                            device: torch.device = torch.device('cpu')):
+    sequences, counts = sequences_uniques_counts_from_file_ab6(round_id, dirpath, device)
 
     seq = torch.repeat_interleave(
         torch.tensor(sequences, device=device, dtype=torch.int32), 

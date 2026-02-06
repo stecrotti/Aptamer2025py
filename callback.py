@@ -200,6 +200,7 @@ class PearsonCovarianceCallback(Callback):
     def plot(self, figsize=(6, 3)):
         fig, ax = plt.subplots(figsize=figsize)
         ax.plot(self.pearson)
+        ax.axhline(y=1, color="red", ls="--")
         ax.set_xlabel('iter')
         ax.set_ylabel('Pearson $C_{ij}$')
 
