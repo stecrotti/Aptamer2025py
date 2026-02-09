@@ -25,6 +25,8 @@ class ConvergenceMetricsCallback(Callback):
         super().__init__()
         self.pearson = []
         self.slope = []
+        self.pearson_detail = []
+        self.slope_detail = []
         self.grad_norm = []
         self.log_likelihood = []
         self.grad_norm_params = []
@@ -83,6 +85,20 @@ class ConvergenceMetricsCallback(Callback):
         self.grad_norm.append(grad_norm)
         self.log_likelihood.append(log_likelihood)
 
+        pearson_detail = []
+        slope_detail = []
+        for (gm, gd) in zip(grad_model, grad_data):
+            x = gm.detach().clone().cpu()
+            y = gd.detach().clone().cpu()
+            assert torch.numel(x) == torch.numel(y)
+            if torch.numel(x) > 1:
+                p = compute_pearson(x, y)
+                s = compute_slope(x, y)
+                pearson_detail.append(p)
+                slope_detail.append(s)
+        self.pearson_detail.append(pearson_detail)
+        self.slope_detail.append(slope_detail)
+
         g = []
         r = []
         for (grad, param) in zip(grad_total, model.parameters()):
@@ -140,6 +156,26 @@ class ConvergenceMetricsCallback(Callback):
         fig.tight_layout()
         
         return fig, axes
+    
+    def plot_pearson_detail(self, figsize=(10, 4)):
+        fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+        for (name, pearson, slope) in zip(self.param_names, zip(*self.pearson_detail), zip(*self.slope_detail)):
+            ax = axes[0]
+            ax.plot([abs(1-p) for p in pearson], label=name)
+            ax.set_xlabel('iter'); ax.set_ylabel('|1 - pearson|')
+            ax.set_yscale('log')
+            ax.legend()
+
+            ax = axes[1]
+            ax.plot([abs(1-s) for s in slope], label=name)
+            ax.set_xlabel('iter'); ax.set_ylabel('|1 - slope|')
+            ax.set_yscale('log')
+            ax.legend()
+
+        fig.tight_layout()
+        
+        return fig, ax
     
     def plot_gradient_parameter_ratio(self, figsize=(10,3)):
         fig, ax = plt.subplots(figsize=figsize)
@@ -249,14 +285,10 @@ class TeacherStudentCallback(Callback):
                 y = param_student.detach().clone().cpu()
                 # if it's a Potts model, only consider the lower diagonal when computing pearson
                 if isinstance(mode_teacher, energy_models.Potts) and name_teacher.endswith('J'):
-                    # L, q, _, _ = x.size()
-                    # idx_row, idx_col = torch.tril_indices(L*q, L*q, offset=-1)
-                    # x = x.reshape(L*q, L*q)[idx_row, idx_col]
-                    # y = y.reshape(L*q, L*q)[idx_row, idx_col]
                     x = utils.off_diagonal_terms(x)
                     y = utils.off_diagonal_terms(y)
                 assert len(x) == len(y)
-                if torch.numel(x) > 0:
+                if torch.numel(x) > 1:
                     p = compute_pearson(x, y)
                     pearson_ps_mode.append(p)
             pearson_ps_round.append(pearson_ps_mode)
