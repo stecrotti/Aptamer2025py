@@ -402,3 +402,13 @@ def compute_slope(x, y):
     num = n * (x @ y) - y.sum() * x.sum()
     den = n * (x @ x) - torch.square(x.sum())
     return torch.abs(num / den).item()
+
+def off_diagonal_terms(J: torch.tensor):
+    L, q, L1, q1 = J.size()
+    assert q == q1
+    assert L == L1
+    Jresh = J.reshape(q*L, q*L)
+    idx_row_up, idx_col_up = torch.triu_indices(L*q, L*q, offset=L) 
+    idx_row_low, idx_col_low = torch.tril_indices(L*q, L*q, offset=-L)
+    Joff = torch.cat((Jresh[idx_row_up, idx_col_up], Jresh[idx_row_low, idx_col_low]))
+    return Joff
