@@ -412,3 +412,10 @@ def off_diagonal_terms(J: torch.tensor):
     idx_row_low, idx_col_low = torch.tril_indices(L*q, L*q, offset=-L)
     Joff = torch.cat((Jresh[idx_row_up, idx_col_up], Jresh[idx_row_low, idx_col_low]))
     return Joff
+
+def field_from_wildtype(wt_oh: torch.tensor, mutation_rate, dtype=torch.float32):
+    q = wt_oh.size(-1)
+    p_wt = 1 - mutation_rate
+    p_non_wt = mutation_rate / (q - 1)
+
+    return torch.log(torch.where(wt_oh.to(torch.bool), p_wt, p_non_wt)).to(dtype)
