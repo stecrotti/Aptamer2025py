@@ -3,6 +3,7 @@ from tqdm.autonotebook import tqdm
 from adabmDCA.dca import get_seqid_stats
 import matplotlib.pyplot as plt
 import numpy as np
+import utils
 
 def _sample_metropolis(model, chains, t, n_steps, beta = 1.0):
     B, L, q = chains.shape
@@ -181,3 +182,11 @@ def compute_and_plot_mixing_time(model, chains, n_max_sweeps = 10**3):
     mixing_times = [results['t_half'][-1] for results in res]
 
     return mixing_times, fig
+
+def sample_indep_sites(h: torch.tensor, n_samples: int, dtype=torch.float32, device=torch.device('cpu')):
+    L, q = h.size()
+    logits = h.unsqueeze(0).expand(n_samples, -1, -1)  # Shape: (nsamples, L, q)
+    sampled_indices = torch.multinomial(torch.softmax(logits.reshape(-1, q), dim=-1), num_samples=1).squeeze(-1)
+    sampled_sequences = utils.one_hot(sampled_indices, num_classes=q).view(n_samples, L, q).to(dtype).to(device)
+
+    return sampled_sequences
