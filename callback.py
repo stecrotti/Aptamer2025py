@@ -4,6 +4,7 @@ from tqdm.autonotebook import tqdm
 import energy_models
 import IPython
 from utils import compute_pearson, compute_slope
+import utils
 
 def relative_error(x, y):
     x = x.reshape(-1)
@@ -240,11 +241,22 @@ class TeacherStudentCallback(Callback):
                 mode_teacher = mode_teacher.set_zerosum_gauge()
                 mode_student = mode_student.set_zerosum_gauge()
             pearson_ps_mode = []
-            for (param_teacher, param_student) in zip(mode_teacher.parameters(), mode_student.parameters()):
-                x = param_teacher.detach().clone().cpu().reshape(-1)
-                y = param_student.detach().clone().cpu().reshape(-1)
+            for (np_teacher, np_student) in zip(mode_teacher.named_parameters(), mode_student.named_parameters()):
+                name_teacher, param_teacher = np_teacher
+                name_student, param_student = np_student
+                assert name_teacher == name_student
+                x = param_teacher.detach().clone().cpu()
+                y = param_student.detach().clone().cpu()
+                # if it's a Potts model, only consider the lower diagonal when computing pearson
+                if isinstance(mode_teacher, energy_models.Potts) and name_teacher.endswith('J'):
+                    # L, q, _, _ = x.size()
+                    # idx_row, idx_col = torch.tril_indices(L*q, L*q, offset=-1)
+                    # x = x.reshape(L*q, L*q)[idx_row, idx_col]
+                    # y = y.reshape(L*q, L*q)[idx_row, idx_col]
+                    x = utils.off_diagonal_terms(x)
+                    y = utils.off_diagonal_terms(y)
                 assert len(x) == len(y)
-                if len(x) > 0:
+                if torch.numel(x) > 0:
                     p = compute_pearson(x, y)
                     pearson_ps_mode.append(p)
             pearson_ps_round.append(pearson_ps_mode)
