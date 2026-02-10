@@ -123,6 +123,7 @@ def train(
                 # update chains and log weights for estimate of normalization
                 with torch.no_grad():
                     energies_AIS[t] = update_chains(chains, t, model, n_sweeps)
+
                 # compute gradient
                 L_m = compute_moments_model_at_round(model, chains[t].clone(), t)
                 L_model = L_model + normalized_total_reads[t] * L_m
@@ -142,24 +143,25 @@ def train(
             # do gradient step on params
             optimizer.step()
 
-            # update logweights for importance sampling estimate of Z
-            for t in ts:
-                energy_prev = model_prev.compute_energy_up_to_round(chains[t], t)
-                log_weights[t] += energy_prev - energies_AIS[t]
-            model_prev = copy.deepcopy(model)
+            with torch.no_grad():
+                # update logweights for importance sampling estimate of normalization constant
+                for t in ts:
+                    energy_prev = model_prev.compute_energy_up_to_round(chains[t], t)
+                    log_weights[t] += energy_prev - energies_AIS[t]
+                model_prev = copy.deepcopy(model).requires_grad_(False)
 
-            epochs += 1
-            converged = (epochs > max_epochs)
+                epochs += 1
+                converged = (epochs > max_epochs)
 
-            # callbacks
-            for callback in callbacks:
-                c = callback.after_step(model=model, chains=chains, total_reads=total_reads, 
-                            data_loaders=data_loaders, model_prev=model_prev,
-                            log_likelihood = log_likelihood, epochs=epochs,
-                            grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
-                         target_pearson=target_pearson, thresh_slope=thresh_slope)
-            converged = converged or c
-            
+                # callbacks
+                for callback in callbacks:
+                    c = callback.after_step(model=model, chains=chains, total_reads=total_reads, 
+                                data_loaders=data_loaders, model_prev=model_prev,
+                                log_likelihood = log_likelihood, epochs=epochs,
+                                grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
+                            target_pearson=target_pearson, thresh_slope=thresh_slope)
+                converged = converged or c
+                
             if converged:
                 model.zero_grad()
                 return
