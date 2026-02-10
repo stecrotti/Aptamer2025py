@@ -6,10 +6,10 @@ import numpy as np
 import utils
 
 @torch.no_grad
-def _sample_metropolis(model, chains, t, n_steps, beta = 1.0):
+def _sample_metropolis(chains, compute_energy, n_steps, beta = 1.0):
     B, L, q = chains.shape
     device = chains.device
-    e_current = model.compute_energy_up_to_round(chains, t)
+    e_current = compute_energy(chains)
 
     for _ in range(n_steps):
         proposal_flip_indices = torch.randint(0, L, (B,), device=device)
@@ -27,7 +27,7 @@ def _sample_metropolis(model, chains, t, n_steps, beta = 1.0):
         chains_flat_proposal = chains_flat_zeroed.scatter(1, new_token_indices, 1)
         
         chains_proposal = chains_flat_proposal.view(B, L, q)
-        e_proposal = model.compute_energy_up_to_round(chains_proposal, t)
+        e_proposal = compute_energy(chains_proposal)
 
         metropolis_acceptance_mask = torch.log(torch.rand(B, device=device)) < beta * (e_current - e_proposal)
 
@@ -42,7 +42,8 @@ def sample_metropolis(model, chains, t, n_sweeps, beta=1.0):
     n_steps = n_sweeps * L
     with torch.no_grad():
         chains_t = chains.select(0, t)
-        chains_t, energies = _sample_metropolis(model, chains_t, t, n_steps, beta)
+        compute_energy = lambda x : model.compute_energy_up_to_round(x, t)
+        chains_t, energies = _sample_metropolis(chains_t, compute_energy, n_steps, beta)
         chains[t] = chains_t
     return energies
 
@@ -194,3 +195,13 @@ def sample_indep_sites(h: torch.tensor, n_samples: int, dtype=torch.float32, dev
     sampled_sequences = utils.one_hot(sampled_indices, num_classes=q).view(n_samples, L, q).to(dtype).to(device)
 
     return sampled_sequences
+
+@torch.no_grad
+def simulated_annealing(chains, compute_energy, n_steps, beta_schedule, callback=None):
+    energies = compute_energy(chains)
+    for beta in beta_schedule:
+        chains, energies = _sample_metropolis(chains, compute_energy, n_steps, beta)
+        if callback:
+            callback(chains, energies, beta)
+
+    return chains, energies
