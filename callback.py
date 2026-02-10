@@ -298,8 +298,8 @@ class TeacherStudentCallback(Callback):
         slope_energy = []
         for t in range(model.get_n_rounds()):
             x = data_loaders[t].get_batch()
-            en_teacher = self.model_teacher.compute_energy_up_to_round(x, t).detach()
-            en_student = model.compute_energy_up_to_round(x, t).detach()
+            en_teacher = self.model_teacher.compute_energy_up_to_round(x, t).detach().cpu()
+            en_student = model.compute_energy_up_to_round(x, t).detach().cpu()
             p = compute_pearson(en_teacher, en_student)
             s = compute_slope(en_teacher, en_student)
             pearson_energy.append(p)
