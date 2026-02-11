@@ -456,7 +456,7 @@ def unique_sequences_counts_enrichments(sequences, verbose=True):
     sequences_unique, inverse_indices, counts = zip(*[
         torch.unique(seq_t, dim=0, return_inverse=True, return_counts=True)
         for seq_t in sequences])
-    shifts = torch.cat((torch.tensor([0]), torch.cumsum(torch.tensor([len(s) for s in sequences_unique]), 0)), 0)[:3]
+    shifts = torch.cat((torch.tensor([0]), torch.cumsum(torch.tensor([len(s) for s in sequences_unique]), 0)), 0)[:-1]
     seq_unique_all = torch.cat(sequences_unique, dim=0)  
     if verbose:
         print('Merging sequences from all rounds in a single container...')
@@ -479,4 +479,4 @@ def unique_sequences_counts_enrichments(sequences, verbose=True):
     if verbose:
         print('Finished')
 
-    return seq_unique_all, counts_unique, enrichments
+    return sequences_unique_all, counts_unique, enrichments
