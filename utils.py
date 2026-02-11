@@ -526,9 +526,10 @@ def binned_logenrichments(model, sequences_unique_all_oh, enrichments, counts_un
 
         fig2, ax = plt.subplots(figsize=(4,3))
         for n in range(n_sel):
-            ax.scatter(bins_ps[1:][idx_above_thresh], logenrich_binned_ps[n][idx_above_thresh], label=f'round {n} to {n+1}')
-            ax.scatter(bins_ps[1:][idx_below_thresh], logenrich_binned_ps[n][idx_below_thresh],
-                       color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0], alpha=0.1)
+            # ax.scatter(bins_ps[1:][idx_above_thresh], logenrich_binned_ps[n][idx_above_thresh], label=f'round {n} to {n+1}')
+            # ax.scatter(bins_ps[1:][idx_below_thresh], logenrich_binned_ps[n][idx_below_thresh],
+            #            color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0], alpha=0.1)
+            ax.plot(bins_ps[1:], logenrich_binned_ps[n], label=f'round {n} to {n+1}', marker='o')
             ax.set_xlabel('log ps')
             ax.set_ylabel('log enrichment, pooled')
             ax.legend()
@@ -575,11 +576,12 @@ def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25,
 
         fig2, ax = plt.subplots(figsize=(4,3))
         for t in range(n_rounds):
-            ax.scatter(bins_Nst[t][1:][idx_above_thresh[t]], logcounts_binned_logNst[t][idx_above_thresh[t]], 
+            # ax.scatter(bins_Nst[t][1:][idx_above_thresh[t]], logcounts_binned_logNst[t][idx_above_thresh[t]], 
+            #            label=f'Round {t}')
+            # ax.scatter(bins_Nst[t][1:][idx_below_thresh[t]], logcounts_binned_logNst[t][idx_below_thresh[t]], 
+            #            color = plt.rcParams['axes.prop_cycle'].by_key()['color'][t], alpha=0.1)
+            ax.plot(bins_Nst[t][1:], logcounts_binned_logNst[t], marker='o',
                        label=f'Round {t}')
-            ax.scatter(bins_Nst[t][1:][idx_below_thresh[t]], logcounts_binned_logNst[t][idx_below_thresh[t]], 
-                       color = plt.rcParams['axes.prop_cycle'].by_key()['color'][t], alpha=0.1)
-
             ax.set_xlabel('log Nst, pooled')
             ax.set_ylabel('log count, pooled')
             ax.legend()
