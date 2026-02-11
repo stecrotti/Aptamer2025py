@@ -7,6 +7,7 @@ from pathlib import Path
 from adabmDCA.fasta import get_tokens, encode_sequence
 import sklearn
 import glob
+import matplotlib.pyplot as plt
 
 TOKENS_PROTEIN = "*ACDEFGHIKLMNPQRSTVWY"
 
@@ -481,8 +482,17 @@ def unique_sequences_counts_enrichments(sequences, verbose=True):
 
     return sequences_unique_all, counts_unique, enrichments
 
-def binned_logenrichments(model, sequences_unique_all_oh, counts_unique, n_bins = 25,
-              selection_round = 1):
+def _discard_cumsum_below(populations, thresh):
+    populations = populations / populations.sum(0, keepdim=True)
+    perm = torch.argsort(populations)
+    id_edge = (populations[perm].cumsum(0) > thresh).to(float).argmax().item()
+    idx_below_thresh = perm[:id_edge+1]
+    idx_above_thresh = perm[id_edge+1:]
+    assert len(idx_below_thresh) + len(idx_above_thresh) == len(populations)
+    return idx_below_thresh, idx_above_thresh
+
+def binned_logenrichments(model, sequences_unique_all_oh, counts_unique, n_bins=25,
+              selection_round = 1, plot=False, thresh=1e-2):
     n_rounds = len(counts_unique)
     assert model.get_n_rounds() == n_rounds
     logps_all = - model.selection_energy_at_round(sequences_unique_all_oh, selection_round).detach()
@@ -491,15 +501,63 @@ def binned_logenrichments(model, sequences_unique_all_oh, counts_unique, n_bins 
     counts_binned_logps = [torch.tensor([counts_unique[t][buckets_logps == b].sum().item() for b in range(n_bins)]) for t in range(n_rounds)]
     enrichments_binned = [counts_binned_logps[t+1] / counts_binned_logps[t] for t in range(n_rounds - 1)]
     logenrich_binned_ps = [torch.log(enrichments_binned[t]) for t in range(n_rounds - 1)]
-    return bins_ps[1:], logps_binned, logenrich_binned_ps
+    idx_below_thresh, idx_above_thresh = _discard_cumsum_below(logps_binned, thresh)
 
-def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25):
+    if plot:
+        hist, ax = plt.subplots(figsize=(4,3))
+        ax.bar(bins_ps[1:][idx_above_thresh], logps_binned[idx_above_thresh])
+        ax.bar(bins_ps[1:][idx_below_thresh], logps_binned[idx_below_thresh], 
+                   color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0], alpha=0.1)
+        ax.set_xlabel('log ps')
+        ax.set_ylabel('count')
+
+        n_sel = model.get_n_selection_rounds()
+        fig, ax = plt.subplots(figsize=(4,3))
+        for n in range(n_sel):
+            ax.scatter(bins_ps[1:][idx_above_thresh], logenrich_binned_ps[n][idx_above_thresh], label=f'round {n} to {n+1}')
+            ax.scatter(bins_ps[1:][idx_below_thresh], logenrich_binned_ps[n][idx_below_thresh],
+                       color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0], alpha=0.1)
+            ax.set_xlabel('log ps')
+            ax.set_ylabel('log enrichment, pooled')
+            ax.legend()
+
+        return bins_ps[1:], logps_binned, logenrich_binned_ps, idx_below_thresh, idx_above_thresh, hist, fig
+
+    return bins_ps[1:], logps_binned, logenrich_binned_ps, idx_below_thresh, idx_above_thresh
+
+def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25, plot=False, thresh=1e-2):
     n_rounds = len(counts_unique)
     assert model.get_n_rounds() == n_rounds
     logNst_unique = [- model.compute_energy_up_to_round(sequences_unique_all_oh, t).detach()
                 for t in range(n_rounds)]
     logNst_binned, bins_Nst = zip(*[torch.histogram(l, bins=n_bins) for l in logNst_unique])
     buckets_logNst = [torch.bucketize(logNst_unique[t], bins_Nst[t]) for t in range(n_rounds)]
-    counts_binned_logNst = [torch.tensor([counts_unique[t][buckets_logNst[t] == b].to(torch.float).mean().item() for b in range(n_bins)]).log() 
+    logcounts_binned_logNst = [torch.tensor([counts_unique[t][buckets_logNst[t] == b].to(torch.float).mean().item() for b in range(n_bins)]).log() 
                             for t in range(n_rounds)]
-    return [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, counts_binned_logNst
+    idx_below_thresh, idx_above_thresh = zip(*[_discard_cumsum_below(logNst_binned[t], thresh)
+                                               for t in range(n_rounds)])
+    if plot:
+        hist, ax = plt.subplots(figsize=(4,3))
+        for t in range(n_rounds):
+            ax.bar(bins_Nst[t][1:][idx_above_thresh[t]], logNst_binned[t][idx_above_thresh[t]], 
+                       label=f'Round {t}')
+            ax.bar(bins_Nst[t][1:][idx_below_thresh[t]], logNst_binned[t][idx_below_thresh[t]], 
+                       color = plt.rcParams['axes.prop_cycle'].by_key()['color'][t], alpha=0.1)
+            ax.set_xlabel('log Nst')
+            ax.set_ylabel('count')
+            ax.legend()
+
+        fig, ax = plt.subplots(figsize=(4,3))
+        for t in range(n_rounds):
+            ax.scatter(bins_Nst[t][1:][idx_above_thresh[t]], logcounts_binned_logNst[t][idx_above_thresh[t]], 
+                       label=f'Round {t}')
+            ax.scatter(bins_Nst[t][1:][idx_below_thresh[t]], logcounts_binned_logNst[t][idx_below_thresh[t]], 
+                       color = plt.rcParams['axes.prop_cycle'].by_key()['color'][t], alpha=0.1)
+
+            ax.set_xlabel('log Nst, pooled')
+            ax.set_ylabel('log count, pooled')
+            ax.legend()
+
+        return [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh, hist, fig
+
+    return [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh
