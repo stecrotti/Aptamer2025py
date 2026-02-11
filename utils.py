@@ -419,3 +419,64 @@ def field_from_wildtype(wt_oh: torch.tensor, mutation_rate, dtype=torch.float32)
     p_non_wt = mutation_rate / (q - 1)
 
     return torch.log(torch.where(wt_oh.to(torch.bool), p_wt, p_non_wt)).to(dtype)
+
+@torch.no_grad
+def epistasis(compute_energy, wt_oh):
+
+    def one_hot_mini(a, q, dtype, device):
+        x = torch.zeros(q, dtype=dtype, device=device)
+        x[a] = 1
+        return x
+
+    L, q = wt_oh.size()
+    dtype=wt_oh.dtype
+    device=wt_oh.device
+    DDE = torch.zeros(L, q, L, q, dtype=dtype, device=device)
+    E_wt = compute_energy(wt_oh)
+    x = wt_oh.clone()
+    for i in range(L):
+        for bi in range(q):
+            for j in range(L):
+                for bj in range(q):
+                    x[i,:] = one_hot_mini(bi, q, dtype=dtype, device=device)
+                    E_i = compute_energy(x) - E_wt
+                    x[j,:] = one_hot_mini(bj, q, dtype=dtype, device=device)
+                    E_double = compute_energy(x) - E_wt
+                    x[i,:] = wt_oh[i,:] 
+                    E_j = compute_energy(x) - E_wt
+                    x[j,:] = wt_oh[j,:]
+                    DDE[i,bi,j,bj] = E_double - E_i - E_j
+    
+    return DDE
+
+def unique_sequences_counts_enrichments(sequences, verbose=True):
+    n_rounds = len(sequences)
+    if verbose:
+        print('Extracting unique sequences and counts at each round...')
+    sequences_unique, inverse_indices, counts = zip(*[
+        torch.unique(seq_t, dim=0, return_inverse=True, return_counts=True)
+        for seq_t in sequences])
+    shifts = torch.cat((torch.tensor([0]), torch.cumsum(torch.tensor([len(s) for s in sequences_unique]), 0)), 0)[:3]
+    seq_unique_all = torch.cat(sequences_unique, dim=0)  
+    if verbose:
+        print('Merging sequences from all rounds in a single container...')
+    sequences_unique_all, inverse_indices_all, counts_all = torch.unique(seq_unique_all, dim=0, return_inverse=True, return_counts=True)
+    n_seq_tot = len(sequences_unique_all)
+    if verbose:
+        print('Assigning counts at each round to unique sequences...')
+    counts_unique = []
+    for t in range(n_rounds):
+        print(f'\tStarting round {t}...')
+        counts_t = torch.zeros(n_seq_tot, dtype=torch.int)
+        for i in range(len(counts[t])):
+            c = counts[t][i]
+            seq_id = inverse_indices_all[shifts[t] + i]
+            counts_t[seq_id] += c
+        counts_unique.append(counts_t)
+    if verbose:
+        print('Calculating enrichments...')
+    enrichments = [counts_unique[t+1] / counts_unique[t] for t in range(n_rounds-1)]
+    if verbose:
+        print('Finished')
+
+    return seq_unique_all, counts_unique, enrichments
