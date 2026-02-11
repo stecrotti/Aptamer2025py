@@ -8,6 +8,7 @@ from adabmDCA.fasta import get_tokens, encode_sequence
 import sklearn
 import glob
 import matplotlib.pyplot as plt
+import random
 
 TOKENS_PROTEIN = "*ACDEFGHIKLMNPQRSTVWY"
 
@@ -491,8 +492,8 @@ def _discard_cumsum_below(populations, thresh):
     assert len(idx_below_thresh) + len(idx_above_thresh) == len(populations)
     return idx_below_thresh, idx_above_thresh
 
-def binned_logenrichments(model, sequences_unique_all_oh, counts_unique, n_bins=25,
-              selection_round = 1, plot=False, thresh=1e-2):
+def binned_logenrichments(model, sequences_unique_all_oh, enrichments, counts_unique, n_bins=25,
+              selection_round = 1, plot=False, thresh=0.0, n_subsample=10**4):
     n_rounds = len(counts_unique)
     assert model.get_n_rounds() == n_rounds
     logps_all = - model.selection_energy_at_round(sequences_unique_all_oh, selection_round).detach()
@@ -504,15 +505,26 @@ def binned_logenrichments(model, sequences_unique_all_oh, counts_unique, n_bins=
     idx_below_thresh, idx_above_thresh = _discard_cumsum_below(logps_binned, thresh)
 
     if plot:
-        hist, ax = plt.subplots(figsize=(4,3))
-        ax.bar(bins_ps[1:][idx_above_thresh], logps_binned[idx_above_thresh])
-        ax.bar(bins_ps[1:][idx_below_thresh], logps_binned[idx_below_thresh], 
-                   color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0], alpha=0.1)
-        ax.set_xlabel('log ps')
-        ax.set_ylabel('count')
-
         n_sel = model.get_n_selection_rounds()
-        fig, ax = plt.subplots(figsize=(4,3))
+        n_seq = len(logps_all)
+        idx = random.sample(range(n_seq), min(n_subsample, n_seq))
+        fig1, ax = plt.subplots(figsize=(4,3))
+        for n in range(n_sel):
+            ax.scatter(logps_all[idx], torch.log(enrichments[n][idx]), label=f'round {n} to {n+1}', s=2)
+            ax.set_xlabel('log ps')
+            ax.set_ylabel('log enrichment')
+            ax.legend()
+        ax.set_title('logps vs log enrichment')
+
+        # hist, ax = plt.subplots(figsize=(4,3))
+        # ax.bar(bins_ps[1:][idx_above_thresh], logps_binned[idx_above_thresh])
+        # ax.bar(bins_ps[1:][idx_below_thresh], logps_binned[idx_below_thresh], 
+        #            color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0], alpha=0.1)
+        # ax.set_xlabel('log ps')
+        # ax.set_ylabel('count')
+        # ax.set_title('Histogram of logps')
+
+        fig2, ax = plt.subplots(figsize=(4,3))
         for n in range(n_sel):
             ax.scatter(bins_ps[1:][idx_above_thresh], logenrich_binned_ps[n][idx_above_thresh], label=f'round {n} to {n+1}')
             ax.scatter(bins_ps[1:][idx_below_thresh], logenrich_binned_ps[n][idx_below_thresh],
@@ -520,12 +532,14 @@ def binned_logenrichments(model, sequences_unique_all_oh, counts_unique, n_bins=
             ax.set_xlabel('log ps')
             ax.set_ylabel('log enrichment, pooled')
             ax.legend()
+        ax.set_title('logps vs log enrichment - binned')
 
-        return logps_all, bins_ps[1:], logps_binned, logenrich_binned_ps, idx_below_thresh, idx_above_thresh, hist, fig
+        return logps_all, bins_ps[1:], logps_binned, logenrich_binned_ps, idx_below_thresh, idx_above_thresh, fig1, fig2
 
     return logps_all, bins_ps[1:], logps_binned, logenrich_binned_ps, idx_below_thresh, idx_above_thresh
 
-def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25, plot=False, thresh=1e-2):
+def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25, plot=False, thresh=0.0,
+                     n_subsample=10**4):
     n_rounds = len(counts_unique)
     assert model.get_n_rounds() == n_rounds
     logNst_unique = [- model.compute_energy_up_to_round(sequences_unique_all_oh, t).detach()
@@ -537,17 +551,29 @@ def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25,
     idx_below_thresh, idx_above_thresh = zip(*[_discard_cumsum_below(logNst_binned[t], thresh)
                                                for t in range(n_rounds)])
     if plot:
-        hist, ax = plt.subplots(figsize=(4,3))
+        n_seq = len(sequences_unique_all_oh)
+        idx = random.sample(range(n_seq), min(n_subsample, n_seq))
+        fig1, ax = plt.subplots(figsize=(4,3))
         for t in range(n_rounds):
-            ax.bar(bins_Nst[t][1:][idx_above_thresh[t]], logNst_binned[t][idx_above_thresh[t]], 
-                       label=f'Round {t}')
-            ax.bar(bins_Nst[t][1:][idx_below_thresh[t]], logNst_binned[t][idx_below_thresh[t]], 
-                       color = plt.rcParams['axes.prop_cycle'].by_key()['color'][t], alpha=0.1)
+            ax.scatter(logNst_unique[t][idx], torch.log(counts_unique[t][idx]), 
+                       label=f'Round {t}', s=2)
             ax.set_xlabel('log Nst')
-            ax.set_ylabel('count')
+            ax.set_ylabel('log count')
             ax.legend()
+        ax.set_title('logNst vs log count')
 
-        fig, ax = plt.subplots(figsize=(4,3))
+        # hist, ax = plt.subplots(figsize=(4,3))
+        # for t in range(n_rounds):
+        #     ax.bar(bins_Nst[t][1:][idx_above_thresh[t]], logNst_binned[t][idx_above_thresh[t]], 
+        #                label=f'Round {t}')
+        #     ax.bar(bins_Nst[t][1:][idx_below_thresh[t]], logNst_binned[t][idx_below_thresh[t]], 
+        #                color = plt.rcParams['axes.prop_cycle'].by_key()['color'][t], alpha=0.1)
+        #     ax.set_xlabel('log Nst')
+        #     ax.set_ylabel('count')
+        #     ax.legend()
+        # ax.set_title('Histogram of logNst')
+
+        fig2, ax = plt.subplots(figsize=(4,3))
         for t in range(n_rounds):
             ax.scatter(bins_Nst[t][1:][idx_above_thresh[t]], logcounts_binned_logNst[t][idx_above_thresh[t]], 
                        label=f'Round {t}')
@@ -557,7 +583,8 @@ def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25,
             ax.set_xlabel('log Nst, pooled')
             ax.set_ylabel('log count, pooled')
             ax.legend()
+        ax.set_title('logNst vs log count - binned')
 
-        return logNst_unique, [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh, hist, fig
+        return logNst_unique, [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh, fig1, fig2
 
     return logNst_unique, [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh
