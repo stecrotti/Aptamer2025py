@@ -480,3 +480,26 @@ def unique_sequences_counts_enrichments(sequences, verbose=True):
         print('Finished')
 
     return sequences_unique_all, counts_unique, enrichments
+
+def binned_logenrichments(model, sequences_unique_all_oh, counts_unique, n_bins = 25,
+              selection_round = 1):
+    n_rounds = len(counts_unique)
+    assert model.get_n_rounds() == n_rounds
+    logps_all = - model.selection_energy_at_round(sequences_unique_all_oh, selection_round).detach()
+    logps_binned, bins_ps = torch.histogram(logps_all, bins=n_bins)
+    buckets_logps = torch.bucketize(logps_all, bins_ps)
+    counts_binned_logps = [torch.tensor([counts_unique[t][buckets_logps == b].sum().item() for b in range(n_bins)]) for t in range(n_rounds)]
+    enrichments_binned = [counts_binned_logps[t+1] / counts_binned_logps[t] for t in range(n_rounds - 1)]
+    logenrich_binned_ps = [torch.log(enrichments_binned[t]) for t in range(n_rounds - 1)]
+    return bins_ps[1:], logps_binned, logenrich_binned_ps
+
+def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25):
+    n_rounds = len(counts_unique)
+    assert model.get_n_rounds() == n_rounds
+    logNst_unique = [- model.compute_energy_up_to_round(sequences_unique_all_oh, t).detach()
+                for t in range(n_rounds)]
+    logNst_binned, bins_Nst = zip(*[torch.histogram(l, bins=n_bins) for l in logNst_unique])
+    buckets_logNst = [torch.bucketize(logNst_unique[t], bins_Nst[t]) for t in range(n_rounds)]
+    counts_binned_logNst = [torch.tensor([counts_unique[t][buckets_logNst[t] == b].to(torch.float).mean().item() for b in range(n_bins)]).log() 
+                            for t in range(n_rounds)]
+    return [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, counts_binned_logNst
