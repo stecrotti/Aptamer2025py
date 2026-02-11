@@ -521,9 +521,9 @@ def binned_logenrichments(model, sequences_unique_all_oh, counts_unique, n_bins=
             ax.set_ylabel('log enrichment, pooled')
             ax.legend()
 
-        return bins_ps[1:], logps_binned, logenrich_binned_ps, idx_below_thresh, idx_above_thresh, hist, fig
+        return logps_all, bins_ps[1:], logps_binned, logenrich_binned_ps, idx_below_thresh, idx_above_thresh, hist, fig
 
-    return bins_ps[1:], logps_binned, logenrich_binned_ps, idx_below_thresh, idx_above_thresh
+    return logps_all, bins_ps[1:], logps_binned, logenrich_binned_ps, idx_below_thresh, idx_above_thresh
 
 def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25, plot=False, thresh=1e-2):
     n_rounds = len(counts_unique)
@@ -558,6 +558,6 @@ def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25,
             ax.set_ylabel('log count, pooled')
             ax.legend()
 
-        return [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh, hist, fig
+        return logNst_unique, [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh, hist, fig
 
-    return [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh
+    return logNst_unique, [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh
