@@ -67,3 +67,14 @@ class SelexRoundDataLoaderIterator:
         batch = self.data_loader.seq_oh[idx].to(self.data_loader.device)
         self.count += 1
         return batch
+    
+def train_test_split(sequences_oh, batch_size, split, device=torch.device('cpu')):
+    seq_train = []; seq_valid = []
+    for seq_oh in sequences_oh:
+        t, v = torch.utils.data.random_split(seq_oh, split)
+        seq_train.append(t.dataset[t.indices])
+        seq_valid.append(v.dataset[v.indices])
+    data_loaders_train = [SelexRoundDataLoader(seq, batch_size=batch_size, device=device) for seq in seq_train]
+    data_loaders_valid = [SelexRoundDataLoader(seq, batch_size=batch_size, device=device) for seq in seq_valid]
+
+    return data_loaders_train, data_loaders_valid

@@ -4,6 +4,7 @@ import selex_distribution
 from callback import ConvergenceMetricsCallback
 import sampling
 import copy
+import math
 
 def init_chains(
     n_rounds: int,
@@ -86,6 +87,7 @@ def train(
     log_weights: torch.Tensor | None = None,
     optimizer = None,
     lr = 1e-2, 
+    data_loaders_valid = None,
     callbacks = [ConvergenceMetricsCallback()],
     update_chains = update_chains_default()
 ):
@@ -143,6 +145,12 @@ def train(
             # do gradient step on params
             optimizer.step()
 
+            if data_loaders_valid is not None:
+                batches = [next(iter(dl)) for dl in data_loaders_valid]
+                log_likelihood_valid = estimate_log_likelihood(model, batches, total_reads, log_weights)
+            else:
+                log_likelihood_valid = None
+
             with torch.no_grad():
                 # update logweights for importance sampling estimate of normalization constant
                 for t in ts:
@@ -156,7 +164,8 @@ def train(
                 # callbacks
                 for callback in callbacks:
                     c = callback.after_step(model=model, chains=chains, total_reads=total_reads, 
-                                data_loaders=data_loaders, model_prev=model_prev,
+                                data_loaders=data_loaders, log_likelihood_valid=log_likelihood_valid, 
+                                model_prev=model_prev,
                                 log_likelihood = log_likelihood, epochs=epochs,
                                 grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
                             target_pearson=target_pearson, thresh_slope=thresh_slope)
@@ -167,3 +176,24 @@ def train(
                 return
 
     model.zero_grad()
+
+@torch.no_grad
+def estimate_logprobability_up_to_round(model, x: torch.tensor, t, log_weights: torch.tensor):
+    batch_size, L, q = x.size()
+    e = model.compute_energy_up_to_round(x, t).mean().item()
+    Llogq = L * math.log(q)
+    logZt = Llogq - math.log(len(log_weights)) + (torch.logsumexp(log_weights, dim=0)).item()
+    logp = - e - logZt
+    return logp
+
+@torch.no_grad
+def estimate_log_likelihood(model, batches, total_reads, log_weights):
+    n_rounds = len(batches)
+    assert len(log_weights) == n_rounds
+    normalized_total_reads = total_reads / total_reads.sum(0, keepdim=True)
+    log_likelihood = 0.0
+    for t in range(n_rounds):
+        Lt = estimate_logprobability_up_to_round(model, batches[t], t, log_weights[t])
+        log_likelihood += (normalized_total_reads[t] * Lt).item()
+
+    return log_likelihood
