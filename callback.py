@@ -29,6 +29,7 @@ class ConvergenceMetricsCallback(Callback):
         self.slope_detail = []
         self.grad_norm = []
         self.log_likelihood = []
+        self.log_likelihood_valid = []
         self.grad_norm_params = []
         self.grad_param_ratio = []
         self.param_names = None
@@ -72,7 +73,8 @@ class ConvergenceMetricsCallback(Callback):
             ax.set_xlabel('iter')
             ax.set_ylabel('NLL')
 
-    def after_step(self, model, grad_model, grad_data, grad_total, log_likelihood, epochs, target_pearson, thresh_slope, *args, **kwargs):
+    def after_step(self, model, grad_model, grad_data, grad_total, log_likelihood, log_likelihood_valid,
+                   epochs, target_pearson, thresh_slope, *args, **kwargs):
         
         x = torch.nn.utils.parameters_to_vector(grad_model)
         y = torch.nn.utils.parameters_to_vector(grad_data)
@@ -84,6 +86,8 @@ class ConvergenceMetricsCallback(Callback):
         self.slope.append(slope)
         self.grad_norm.append(grad_norm)
         self.log_likelihood.append(log_likelihood)
+        if log_likelihood_valid:
+            self.log_likelihood_valid.append(log_likelihood_valid)
 
         pearson_detail = []
         slope_detail = []
@@ -112,7 +116,10 @@ class ConvergenceMetricsCallback(Callback):
 
         if self.progress_bar:
             self.pbar.n = epochs
-            self.pbar.set_description(f"Epoch {epochs}, Pearson = {pearson:.4e}, Gradient norm = {grad_norm:.4e}, NLL = {-log_likelihood:.4e}")
+            desc = f"Epoch {epochs}, Pearson = {pearson:.4e}, Grad norm = {grad_norm:.4e}, NLL = {-log_likelihood:.4e}"
+            if log_likelihood_valid:
+                desc += f", NLL valid = {-log_likelihood_valid:.4e}"
+            self.pbar.set_description()
         
         if self.progress_plot:
             self.axes[0].plot([abs(1-p) for p in self.pearson])
@@ -149,9 +156,12 @@ class ConvergenceMetricsCallback(Callback):
         ax.set_ylabel('|| grad logL ||')
 
         ax = axes[3]
-        ax.plot([-nll for nll in self.log_likelihood])
+        ax.plot([-nll for nll in self.log_likelihood], label='training')
+        if self.log_likelihood_valid:
+            ax.plot([-nll for nll in self.log_likelihood_valid], label='validation')
         ax.set_xlabel('iter')
         ax.set_ylabel('NLL')
+        ax.legend()
 
         fig.tight_layout()
         
@@ -205,11 +215,7 @@ class ConvergenceMetricsCallback(Callback):
         ax.set_yscale('log')
         return fig, ax
     
-def compute_potts_covariance(model, grad_model, grad_data):
-    fi = grad_data[1]
-    fij = grad_data[2]
-    pi = grad_model[1]
-    pij = grad_model[2]
+def compute_potts_covariance(model, fi, fij, pi, pij):
     mask = model.selection.modes[0].mask
     pij = pij * mask * 2
     fij = fij * mask * 2
@@ -226,22 +232,51 @@ def compute_potts_covariance(model, grad_model, grad_data):
 class PearsonCovarianceCallback(Callback):
     def __init__(self):
         super().__init__()
-        self.pearson = []
+        self.pearson_Ns0 = []
+        self.pearson_ps = []
 
     def after_step(self, model, grad_model, grad_data,  *args, **kwargs):
-        pearson = compute_potts_covariance(model, grad_model, grad_data)
-        self.pearson.append(pearson)
+        offset = 0
+        pearson_Ns0_round = []
+        if isinstance(model.round_zero, energy_models.Potts):
+            pearson_Ns0_round = compute_potts_covariance(
+                model, grad_data[0+offset], grad_data[1+offset], grad_model[0+offset], grad_model[1+offset])
+        self.pearson_Ns0.append(pearson_Ns0_round)
+        offset += len(list(model.round_zero.parameters()))
+        
+        pearson_ps_round = []
+        for (mode) in model.selection.modes:
+            pearson_ps_mode = []
+            if isinstance(mode, energy_models.Potts):
+                pearson_ps_mode = compute_potts_covariance(
+                    model, grad_data[0+offset], grad_data[1+offset], grad_model[0+offset], grad_model[1+offset])
+            offset += len(list(mode.parameters()))
+            pearson_ps_round.append(pearson_ps_mode)
+        self.pearson_ps.append(pearson_ps_round)
 
         return False
     
-    def plot(self, figsize=(6, 3)):
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.plot(self.pearson)
-        ax.axhline(y=1, color="red", ls="--")
-        ax.set_xlabel('iter')
-        ax.set_ylabel('Pearson $C_{ij}$')
+    def plot(self, figsize=(10, 4)):
+        fig, axes = plt.subplots(1, 2, figsize=figsize)
 
-        return fig, ax
+        ax = axes[0]
+        ax.set_title('Ns0')
+        ax.plot(self.pearson_Ns0)
+        ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
+        ax.set_xlabel('iter'); ax.set_ylabel('Pearson $C_{ij}$')
+        
+        pearson_ps = zip(*self.pearson_ps)
+        ax = axes[1]
+        for (i, pearson_mode) in enumerate(pearson_ps):
+            ax.set_title('ps')
+            ax.plot(pearson_mode, label=f'Potts mode #{i}')
+            ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
+            ax.set_xlabel('iter'); ax.set_ylabel('Pearson $C_{ij}$')
+            ax.legend()
+        fig.suptitle('Pearson on covariances for Potts modes')
+        fig.tight_layout()
+        
+        return fig, axes
     
     
 class TeacherStudentCallback(Callback):
