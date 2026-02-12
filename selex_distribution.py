@@ -1,6 +1,5 @@
 import torch
 from torch.nn import Module
-import math
 from tree import Tree
 import sampling
 
@@ -128,11 +127,3 @@ class MultiRoundDistribution(torch.nn.Module):
                 energies[t] = energy_t
         
         return energies
-    
-    def estimate_logprobability_up_to_round(self, x, t, log_weights):
-        batch_size, L, q = x.size()
-        e = self.compute_energy_up_to_round(self, x, t)
-        Llogq = L * math.log(q)
-        logZt = Llogq - math.log(len(log_weights)) + (torch.logsumexp(log_weights[t], dim=0)).item()
-        logp = - e - logZt
-        return logp
