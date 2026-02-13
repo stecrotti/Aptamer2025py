@@ -20,7 +20,7 @@ class SelexRoundDataLoader:
     def __init__(
         self,
         seq_oh: torch.Tensor,
-        batch_size,
+        batch_size = None,
         device = None,
         generator = None
     ):
@@ -28,6 +28,10 @@ class SelexRoundDataLoader:
             device = seq_oh.device
         if generator is None:
             generator = torch.Generator()
+        if batch_size is None:
+            batch_size = len(seq_oh)
+        elif batch_size > len(seq_oh):
+            raise ValueError(f"Batch size cannot be larger than number of sequences, got {batch_size} and {len(seq_oh)}.")
         self.seq_oh = seq_oh
         self.batch_size = batch_size
         self.device = device
