@@ -116,10 +116,10 @@ class ConvergenceMetricsCallback(Callback):
 
         if self.progress_bar:
             self.pbar.n = epochs
-            desc = f"Epoch {epochs}, Pearson = {pearson:.4e}, Grad norm = {grad_norm:.4e}, NLL = {-log_likelihood:.4e}"
+            desc = f"Epoch {epochs}, Pearson = {pearson:.4f}, Grad norm = {grad_norm:.4f}, NLL = {-log_likelihood:.4f}"
             if log_likelihood_valid:
-                desc += f", NLL valid = {-log_likelihood_valid:.4e}"
-            self.pbar.set_description()
+                desc += f", NLL valid = {-log_likelihood_valid:.4f}"
+            self.pbar.set_description(desc)
         
         if self.progress_plot:
             self.axes[0].plot([abs(1-p) for p in self.pearson])
