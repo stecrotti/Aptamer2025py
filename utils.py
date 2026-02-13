@@ -161,6 +161,17 @@ def sequences_from_file(experiment_id: str, round_id: str,
     
     return seq
 
+def sequences_from_files(experiment_id: str, round_ids, 
+                        device=torch.device("cpu"), verbose=True):
+    sequences = []
+    if verbose: print('Extracting sequences...')
+    for round_id in round_ids:
+        s = sequences_from_file(experiment_id, round_id)
+        sequences.append(s)
+        if verbose: print(f"Finished round {round_id}")
+
+    return sequences
+
 def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):         
     dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()   
     filepath = dirpath / (experiment_id + "_" + round_id + ".fasta")
@@ -422,32 +433,59 @@ def field_from_wildtype(wt_oh: torch.tensor, mutation_rate, dtype=torch.float32)
 
     return torch.log(torch.where(wt_oh.to(torch.bool), p_wt, p_non_wt)).to(dtype)
 
-@torch.no_grad
 def epistasis(compute_energy, wt_oh):
-
-    def one_hot_mini(a, q, dtype, device):
-        x = torch.zeros(q, dtype=dtype, device=device)
-        x[a] = 1
-        return x
-
+    """
+    Compute epistatic couplings as in equation (6) of the paper.
+    
+    ΔΔE(i→bi, j→bj) = ΔE(double) - ΔE(i→bi) - ΔE(j→bj)
+    where ΔE is the energy change relative to wild-type
+    """
+    
     L, q = wt_oh.size()
-    dtype=wt_oh.dtype
-    device=wt_oh.device
-    DDE = torch.zeros(L, q, L, q, dtype=dtype, device=device)
+    dtype = wt_oh.dtype
+    device = wt_oh.device
+    
+    # Precompute wild-type energy
     E_wt = compute_energy(wt_oh)
+    
+    # Precompute all single mutation energies
+    DE_single = torch.zeros(L, q, dtype=dtype, device=device)
     x = wt_oh.clone()
+    
     for i in range(L):
+        wt_i = wt_oh[i].clone()  # Save original
         for bi in range(q):
+            x[i] = torch.zeros(q, dtype=dtype, device=device)
+            x[i, bi] = 1
+            DE_single[i, bi] = compute_energy(x) - E_wt
+        x[i] = wt_i  # Restore
+    
+    # Compute double mutations and epistasis
+    DDE = torch.zeros(L, q, L, q, dtype=dtype, device=device)
+    
+    for i in range(L):
+        wt_i = wt_oh[i].clone()
+        for bi in range(q):
+            x[i] = torch.zeros(q, dtype=dtype, device=device)
+            x[i, bi] = 1
+            
             for j in range(L):
+                if i == j:
+                    continue  # Skip diagonal
+                    
+                wt_j = wt_oh[j].clone()
                 for bj in range(q):
-                    x[i,:] = one_hot_mini(bi, q, dtype=dtype, device=device)
-                    E_i = compute_energy(x) - E_wt
-                    x[j,:] = one_hot_mini(bj, q, dtype=dtype, device=device)
+                    x[j] = torch.zeros(q, dtype=dtype, device=device)
+                    x[j, bj] = 1
+                    
+                    # Double mutation energy
                     E_double = compute_energy(x) - E_wt
-                    x[i,:] = wt_oh[i,:] 
-                    E_j = compute_energy(x) - E_wt
-                    x[j,:] = wt_oh[j,:]
-                    DDE[i,bi,j,bj] = E_double - E_i - E_j
+                    
+                    # Epistasis
+                    DDE[i, bi, j, bj] = E_double - DE_single[i, bi] - DE_single[j, bj]
+                    
+                x[j] = wt_j  # Restore j
+            x[i] = wt_i  # Restore i
     
     return DDE
 
@@ -531,7 +569,7 @@ def binned_logenrichments(model, sequences_unique_all_oh, enrichments, counts_un
             #            color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0], alpha=0.1)
             ax.plot(bins_ps[1:], logenrich_binned_ps[n], label=f'round {n} to {n+1}', marker='o')
             ax.set_xlabel('log ps')
-            ax.set_ylabel('log enrichment, pooled')
+            ax.set_ylabel('log enrichment, binned')
             ax.legend()
         ax.set_title('logps vs log enrichment - binned')
 
@@ -582,8 +620,8 @@ def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25,
             #            color = plt.rcParams['axes.prop_cycle'].by_key()['color'][t], alpha=0.1)
             ax.plot(bins_Nst[t][1:], logcounts_binned_logNst[t], marker='o',
                        label=f'Round {t}')
-            ax.set_xlabel('log Nst, pooled')
-            ax.set_ylabel('log count, pooled')
+            ax.set_xlabel('log Nst, binned')
+            ax.set_ylabel('log count, binned')
             ax.legend()
         ax.set_title('logNst vs log count - binned')
 
