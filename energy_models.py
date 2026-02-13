@@ -46,6 +46,13 @@ class IndepSites(EnergyModel):
         p = p / p.sum(1, keepdim=True)
         return (- self.h * p).sum()
 
+    def lognormalization(self):
+        return torch.logsumexp(self.h, dim=1).sum()
+    
+    def normalize(self):
+        logZ = self.lognormalization().detach()
+        self.h = torch.nn.Parameter(self.h - logZ)
+
 class Potts(EnergyModel):
     def __init__(
         self,
