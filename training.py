@@ -88,6 +88,7 @@ def train(
     optimizer = None,
     lr = 1e-2, 
     data_loaders_valid = None,
+    total_reads_valid = None,
     callbacks = [ConvergenceMetricsCallback()],
     update_chains = update_chains_default()
 ):
@@ -147,7 +148,7 @@ def train(
 
             if data_loaders_valid is not None:
                 batches = [next(iter(dl)) for dl in data_loaders_valid]
-                log_likelihood_valid = estimate_log_likelihood(model, batches, total_reads, log_weights)
+                log_likelihood_valid = estimate_log_likelihood(model, batches, total_reads_valid, log_weights)
             else:
                 log_likelihood_valid = None
 
@@ -166,6 +167,7 @@ def train(
                     c = callback.after_step(model=model, chains=chains, total_reads=total_reads, 
                                 data_loaders=data_loaders, log_likelihood_valid=log_likelihood_valid, 
                                 model_prev=model_prev,
+                                data_loaders_valid=data_loaders_valid, total_reads_valid=total_reads_valid,
                                 log_likelihood = log_likelihood, epochs=epochs,
                                 grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
                             target_pearson=target_pearson, thresh_slope=thresh_slope)
@@ -180,10 +182,10 @@ def train(
 @torch.no_grad
 def estimate_logprobability_up_to_round(model, x: torch.tensor, t, log_weights: torch.tensor):
     batch_size, L, q = x.size()
-    e = model.compute_energy_up_to_round(x, t).mean().item()
+    en = model.compute_energy_up_to_round(x, t).mean().item()
     Llogq = L * math.log(q)
     logZt = Llogq - math.log(len(log_weights)) + (torch.logsumexp(log_weights, dim=0)).item()
-    logp = - e - logZt
+    logp = - en - logZt
     return logp
 
 @torch.no_grad
