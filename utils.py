@@ -420,11 +420,9 @@ def off_diagonal_terms(J: torch.tensor):
     L, q, L1, q1 = J.size()
     assert q == q1
     assert L == L1
-    Jresh = J.reshape(q*L, q*L)
-    idx_row_up, idx_col_up = torch.triu_indices(L*q, L*q, offset=L) 
-    idx_row_low, idx_col_low = torch.tril_indices(L*q, L*q, offset=-L)
-    Joff = torch.cat((Jresh[idx_row_up, idx_col_up], Jresh[idx_row_low, idx_col_low]))
-    return Joff
+    idx_row, idx_col = torch.tril_indices(L, L, offset=-1)
+    Jlower = J[idx_row, :, idx_col, :].reshape(-1)
+    return Jlower
 
 def field_from_wildtype(wt_oh: torch.tensor, mutation_rate, dtype=torch.float32):
     q = wt_oh.size(-1)

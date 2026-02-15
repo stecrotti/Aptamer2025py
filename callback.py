@@ -5,6 +5,7 @@ import energy_models
 import IPython
 from utils import compute_pearson, compute_slope
 import utils
+import numpy
 
 def relative_error(x, y):
     x = x.reshape(-1)
@@ -116,7 +117,7 @@ class ConvergenceMetricsCallback(Callback):
 
         if self.progress_bar:
             self.pbar.n = epochs
-            desc = f"Epoch {epochs}, Pearson = {pearson:.4f}, Grad norm = {grad_norm:.4f}, NLL = {-log_likelihood:.4f}"
+            desc = f"Epoch {epochs}, Pearson = {pearson:.5f}, Grad norm = {grad_norm:.4e}, NLL = {-log_likelihood:.4f}"
             if log_likelihood_valid:
                 desc += f", NLL valid = {-log_likelihood_valid:.4f}"
             self.pbar.set_description(desc)
@@ -216,16 +217,19 @@ class ConvergenceMetricsCallback(Callback):
         return fig, ax
     
 def compute_potts_covariance(model, fi, fij, pi, pij):
-    mask = model.selection.modes[0].mask
-    pij = pij * mask * 2
-    fij = fij * mask * 2
+    L, q = fi.size()
+    assert fij.size() == (L, q, L, q), f"{fij.size()}"
+    pij = pij * 2
+    fij = fij * 2
     cov_data = fij - torch.einsum('ij,kl->ijkl', fi, fi)
     cov_chains = pij - torch.einsum('ij,kl->ijkl', pi, pi)
-    L = fi.size(0)
-    idx_row, idx_col = torch.tril_indices(L, L, offset=-1)
-    fij_extract = cov_data[idx_row, :, idx_col, :].reshape(-1)
-    pij_extract = cov_chains[idx_row, :, idx_col, :].reshape(-1)
-    pearson = torch.corrcoef(torch.stack([fij_extract.float(), pij_extract.float()]))[0, 1].item()
+    # L = fi.size(0)
+    # idx_row, idx_col = torch.tril_indices(L, L, offset=-1)
+    # fij_extract = cov_data[idx_row, :, idx_col, :].reshape(-1)
+    # pij_extract = cov_chains[idx_row, :, idx_col, :].reshape(-1)
+    # pearson = utils.compute_pearson(fij_extract.float(), pij_extract.float())
+
+    pearson = utils.compute_pearson(utils.off_diagonal_terms(cov_data), utils.off_diagonal_terms(cov_chains))
     
     return pearson
     
@@ -240,7 +244,7 @@ class PearsonCovarianceCallback(Callback):
         pearson_Ns0_round = []
         if isinstance(model.round_zero, energy_models.Potts):
             pearson_Ns0_round = compute_potts_covariance(
-                model, grad_data[0+offset], grad_data[1+offset], grad_model[0+offset], grad_model[1+offset])
+                model, grad_data[1+offset], grad_data[0+offset], grad_model[1+offset], grad_model[0+offset])
         self.pearson_Ns0.append(pearson_Ns0_round)
         offset += len(list(model.round_zero.parameters()))
         
@@ -249,7 +253,7 @@ class PearsonCovarianceCallback(Callback):
             pearson_ps_mode = []
             if isinstance(mode, energy_models.Potts):
                 pearson_ps_mode = compute_potts_covariance(
-                    model, grad_data[0+offset], grad_data[1+offset], grad_model[0+offset], grad_model[1+offset])
+                    model, grad_data[1+offset], grad_data[0+offset], grad_model[1+offset], grad_model[0+offset])
             offset += len(list(mode.parameters()))
             pearson_ps_round.append(pearson_ps_mode)
         self.pearson_ps.append(pearson_ps_round)
@@ -346,6 +350,7 @@ class TeacherStudentCallback(Callback):
     def plot_pearson_parameters(self, figsize=(10, 4)):
         n_selection_modes = self.model_teacher.selection.get_n_modes()
         fig, axes = plt.subplots(1, n_selection_modes + 1, figsize=figsize)
+        if type(axes) != numpy.ndarray: axes = [axes]
 
         ax = axes[0]
         ax.set_title('Ns0')
@@ -374,6 +379,7 @@ class TeacherStudentCallback(Callback):
     def plot_pearson_energies(self, figsize=(10, 4)):
         n_rounds = self.model_teacher.get_n_rounds()
         fig, axes = plt.subplots(1, n_rounds, figsize=figsize)
+        if type(axes) != numpy.ndarray: axes = [axes]
 
         pearson_energy = list(zip(*self.pearson_energies))
         slope_energy = list(zip(*self.slope_energies))
