@@ -431,6 +431,7 @@ def field_from_wildtype(wt_oh: torch.tensor, mutation_rate, dtype=torch.float32)
 
     return torch.log(torch.where(wt_oh.to(torch.bool), p_wt, p_non_wt)).to(dtype)
 
+@torch.no_grad
 def epistasis(compute_energy, wt_oh):
     """
     Compute epistatic couplings as in equation (6) of the paper.
