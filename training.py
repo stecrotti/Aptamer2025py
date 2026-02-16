@@ -31,13 +31,9 @@ def update_chains_default():
         return sampling.sample_metropolis(model, chains, t, n_sweeps)
     return update_chains
 
-def compute_moments_model_at_round(model, chains, t):
+def compute_moments_at_round(model, x, t):
     # this L is not physically a likelihood, more like a computational trick
-    return - model.compute_energy_up_to_round(chains, t).mean()
-
-def compute_moments_data_at_round(model, data_batch, t):
-    # this L is not physically a likelihood, more like a computational trick
-    return - model.compute_energy_up_to_round(data_batch, t).mean()
+    return - model.compute_energy_up_to_round(x, t).mean()
 
 def compute_grad_model(model, L_model, retain_graph):
     params = tuple(model.parameters())
@@ -128,12 +124,12 @@ def train(
                     energies_AIS[t] = update_chains(chains, t, model, n_sweeps)
 
                 # compute gradient
-                L_m = compute_moments_model_at_round(model, chains[t].clone(), t)
+                L_m = compute_moments_at_round(model, chains[t].clone(), t)
                 L_model = L_model + normalized_total_reads[t] * L_m
                 
                 # extract batch of data from round t
                 data_batch = batches[t]
-                L_d = compute_moments_data_at_round(model, data_batch, t)
+                L_d = compute_moments_at_round(model, data_batch, t)
                 L_data = L_data + normalized_total_reads[t] * L_d
                 logZt = Llogq + (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
                 Lt = L_d.detach().clone() - logZt
