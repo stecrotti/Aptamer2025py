@@ -216,18 +216,11 @@ class ConvergenceMetricsCallback(Callback):
         ax.set_yscale('log')
         return fig, ax
     
-def compute_potts_covariance(model, fi, fij, pi, pij):
+def compute_potts_covariance(fi, fij, pi, pij):
     L, q = fi.size()
     assert fij.size() == (L, q, L, q), f"{fij.size()}"
-    pij = pij * 2
-    fij = fij * 2
     cov_data = fij - torch.einsum('ij,kl->ijkl', fi, fi)
     cov_chains = pij - torch.einsum('ij,kl->ijkl', pi, pi)
-    # L = fi.size(0)
-    # idx_row, idx_col = torch.tril_indices(L, L, offset=-1)
-    # fij_extract = cov_data[idx_row, :, idx_col, :].reshape(-1)
-    # pij_extract = cov_chains[idx_row, :, idx_col, :].reshape(-1)
-    # pearson = utils.compute_pearson(fij_extract.float(), pij_extract.float())
 
     pearson = utils.compute_pearson(utils.off_diagonal_terms(cov_data), utils.off_diagonal_terms(cov_chains))
     
@@ -238,13 +231,15 @@ class PearsonCovarianceCallback(Callback):
         super().__init__()
         self.pearson_Ns0 = []
         self.pearson_ps = []
+        self.grad_data = []
+        self.grad_model = []
 
-    def after_step(self, model, grad_model, grad_data,  *args, **kwargs):
+    def after_step(self, model, grad_model, grad_data, data_loaders, *args, **kwargs):
         offset = 0
         pearson_Ns0_round = []
         if isinstance(model.round_zero, energy_models.Potts):
             pearson_Ns0_round = compute_potts_covariance(
-                model, grad_data[1+offset], grad_data[0+offset], grad_model[1+offset], grad_model[0+offset])
+                grad_data[1+offset], grad_data[0+offset]*2, grad_model[1+offset], grad_model[0+offset]*2)
         self.pearson_Ns0.append(pearson_Ns0_round)
         offset += len(list(model.round_zero.parameters()))
         
@@ -253,10 +248,31 @@ class PearsonCovarianceCallback(Callback):
             pearson_ps_mode = []
             if isinstance(mode, energy_models.Potts):
                 pearson_ps_mode = compute_potts_covariance(
-                    model, grad_data[1+offset], grad_data[0+offset], grad_model[1+offset], grad_model[0+offset])
+                    grad_data[1+offset], grad_data[0+offset]*2, grad_model[1+offset], grad_model[0+offset]*2)
             offset += len(list(mode.parameters()))
             pearson_ps_round.append(pearson_ps_mode)
         self.pearson_ps.append(pearson_ps_round)
+
+        self.grad_data.append([g.detach().cpu().clone() for g in grad_data])
+        self.grad_model.append([g.detach().cpu().clone() for g in grad_model])
+
+        # offset = 0
+        # pearson_Ns0_round_noAD = []
+        # if isinstance(model.round_zero, energy_models.Potts):
+        #     pearson_Ns0_round_noAD = compute_potts_covariance(
+        #         grad_data[1+offset], grad_data[0+offset]*2, grad_model[1+offset], grad_model[0+offset]*2)
+        # self.pearson_Ns0_noAD.append(pearson_Ns0_round_noAD)
+        # offset += len(list(model.round_zero.parameters()))
+        
+        # pearson_ps_round_noAD = []
+        # for (mode) in model.selection.modes:
+        #     pearson_ps_mode_noAD = []
+        #     if isinstance(mode, energy_models.Potts):
+        #         pearson_ps_mode_noAD = compute_potts_covariance(
+        #             grad_data[1+offset], grad_data[0+offset]*2, grad_model[1+offset], grad_model[0+offset]*2)
+        #     offset += len(list(mode.parameters()))
+        #     pearson_ps_round_noAD.append(pearson_ps_mode_noAD)
+        # self.pearson_ps_noAD.append(pearson_ps_round_noAD)
 
         return False
     
