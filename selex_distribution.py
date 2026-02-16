@@ -46,9 +46,9 @@ class MultiRoundDistribution(torch.nn.Module):
     def __init__(
         self,
         round_zero: EnergyModel,
-        selection: MultiModeDistribution,
-        tree: Tree,
-        selected_modes: torch.BoolTensor,   # (n_rounds * n_modes) modes selected for at each round
+        selection: MultiModeDistribution = MultiModeDistribution(),
+        tree: Tree = Tree(),
+        selected_modes: torch.BoolTensor = torch.empty(0, 0, dtype=bool),   # (n_rounds * n_modes) modes selected for at each round
         selection_strength: torch.Tensor | None = None,
         learn_selection_strength: bool = False,
         dtype = torch.float32
@@ -115,6 +115,8 @@ class MultiRoundDistribution(torch.nn.Module):
         self.selected_modes = fn(self.selected_modes)
         if not self.learn_selection_strength:
             self.selection_strength = fn(self.selection_strength)
+        # self.round_zero = self.round_zero._apply(fn)
+        # self.selection = self.selection._apply(fn)
         
         return self
 
