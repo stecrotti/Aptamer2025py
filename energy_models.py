@@ -68,15 +68,14 @@ class Potts(EnergyModel):
             raise ValueError(f"Expected tensor with 4 dimensions, got {len(sz_J)}.")
         if not (sz_J[0:2] == sz_J[2:4] == sz_h):
             raise ValueError("Wrong tensor dimensions")
-        
-        self.h = torch.nn.Parameter(h)
 
         L, q = sz_h
         mask = torch.ones(L, q, L, q, device=J.device)
         # set the (i,i) blocks to zero
         mask[torch.arange(L), :, torch.arange(L), :] = 0
-        self.J = torch.nn.Parameter(J)
 
+        self.J = torch.nn.Parameter(J)
+        self.h = torch.nn.Parameter(h)
         # so that mask is not trained, but automatically moved to gpu with the rest of the model
         self.register_buffer('mask', mask)
 
