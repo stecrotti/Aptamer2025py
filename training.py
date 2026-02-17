@@ -5,6 +5,10 @@ from callback import ConvergenceMetricsCallback
 import sampling
 import copy
 import math
+import utils
+import pathlib
+import glob
+import os
 
 def init_chains(
     n_rounds: int,
@@ -69,6 +73,26 @@ def compute_total_gradient(model, grad_model, grad_data):
 
     return grad_total
 
+def save_checkpoint(checkpoint_filename, **kwargs):
+    fn = checkpoint_filename + '_' + utils.datetime_as_string() + '.pt'
+    dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}' 
+    pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
+    torch.save(kwargs, dirpath / fn)
+
+def load_checkpoints(checkpoint_filename):
+    cps = []
+    dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}'
+    dirpath = str(dirpath)
+    files = glob.glob(dirpath + f'/{checkpoint_filename}*.pt')
+
+    for file in sorted(files, key=os.path.getmtime):
+        cp = torch.load(file, weights_only=False)
+        cps.append(cp)
+
+    print(f'Loaded {len(cps)} files.')
+    
+    return cps
+
 
 def train(
     model: selex_distribution.MultiRoundDistribution,
@@ -83,6 +107,8 @@ def train(
     log_weights: torch.Tensor | None = None,
     optimizer = None,
     lr = 1e-2, 
+    checkpoint_every = torch.inf,
+    checkpoint_filename = 'model',
     data_loaders_valid = None,
     total_reads_valid = None,
     callbacks = [ConvergenceMetricsCallback()],
@@ -154,6 +180,10 @@ def train(
                     energy_prev = model_prev.compute_energy_up_to_round(chains[t], t)
                     log_weights[t] += energy_prev - energies_AIS[t]
                 model_prev = copy.deepcopy(model).requires_grad_(False)
+
+                if epochs % checkpoint_every == 0:
+                    save_checkpoint(checkpoint_filename, 
+                                    model=model, optimizer=optimizer, log_weights=log_weights)
 
                 epochs += 1
                 converged = (epochs > max_epochs)

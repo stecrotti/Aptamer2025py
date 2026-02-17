@@ -14,3 +14,6 @@ experiments/img/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# model checkpoints
+experiments/checkpoints/

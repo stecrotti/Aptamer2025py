@@ -1,4 +1,3 @@
-from typing import Dict, Callable, Tuple, List, Any
 import torch
 import numpy as np
 from Bio import SeqIO
@@ -9,6 +8,7 @@ import sklearn
 import glob
 import matplotlib.pyplot as plt
 import random
+from datetime import datetime
 
 TOKENS_PROTEIN = "*ACDEFGHIKLMNPQRSTVWY"
 
@@ -627,3 +627,7 @@ def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25,
         return logNst_unique, [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh, fig1, fig2
 
     return logNst_unique, [bins_Nst[t][1:] for t in range(n_rounds)], logNst_binned, logcounts_binned_logNst, idx_below_thresh, idx_above_thresh
+
+def datetime_as_string():
+    now = datetime.now() # current date and time
+    return now.strftime("%m-%d-%Y_%H-%M-%S")
