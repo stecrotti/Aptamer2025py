@@ -631,3 +631,12 @@ def binned_logcounts(model, sequences_unique_all_oh, counts_unique, n_bins = 25,
 def datetime_as_string():
     now = datetime.datetime.now(tz=datetime.timezone(datetime.timedelta(hours=1)))
     return now.strftime("%m-%d-%Y_%H-%M-%S")
+
+def best_device(verbose=True):
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
+    if verbose:
+        print(f'Selected device: {device}')
+    return device

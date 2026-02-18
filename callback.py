@@ -9,6 +9,7 @@ import utils
 import numpy
 import pathlib
 import numpy
+import copy
 
 def relative_error(x, y):
     x = x.reshape(-1)
@@ -160,9 +161,9 @@ class ConvergenceMetricsCallback(Callback):
         ax.set_ylabel('|| grad logL ||')
 
         ax = axes[3]
-        ax.plot([-nll for nll in self.log_likelihood], label='training')
+        ax.plot([-ll for ll in self.log_likelihood], label='training')
         if self.log_likelihood_valid:
-            ax.plot([-nll for nll in self.log_likelihood_valid], label='validation')
+            ax.plot([-ll for ll in self.log_likelihood_valid], label='validation')
         ax.set_xlabel('iter')
         ax.set_ylabel('NLL')
         ax.legend()
@@ -237,11 +238,10 @@ class PearsonCovarianceCallback(Callback):
 
     def after_step(self, model, grad_model, grad_data, data_loaders, *args, **kwargs):
         offset = 0
-        pearson_Ns0_round = []
         if isinstance(model.round_zero, energy_models.Potts):
-            pearson_Ns0_round = compute_potts_covariance(
+            pearson_Ns0 = compute_potts_covariance(
                 grad_data[1+offset], grad_data[0+offset]*2, grad_model[1+offset], grad_model[0+offset]*2)
-        self.pearson_Ns0.append(pearson_Ns0_round)
+            self.pearson_Ns0.append(pearson_Ns0)
         offset += len(list(model.round_zero.parameters()))
         
         pearson_ps_round = []
@@ -261,18 +261,29 @@ class PearsonCovarianceCallback(Callback):
 
         ax = axes[0]
         ax.set_title('Ns0')
-        ax.plot(self.pearson_Ns0)
-        ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
-        ax.set_xlabel('iter'); ax.set_ylabel('Pearson $C_{ij}$')
+        x = [abs(1-p) for p in self.pearson_Ns0]
+        ax.plot(x)
+        # ax.plot(self.pearson_Ns0)
+        # ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
+        ax.set_xlabel('iter'); 
+        # ax.set_ylabel('Pearson $C_{ij}$')
+        ax.set_title('Pearson $C_{ij}$ Ns0')
+        ax.set_ylabel('$|1-\\rho|$')
+        ax.set_yscale('log')
         
         pearson_ps = zip(*self.pearson_ps)
         ax = axes[1]
+        ax.set_xlabel('iter'); 
+        # ax.set_ylabel('Pearson $C_{ij}$')
+        ax.set_ylabel('$|1-\\rho|$')
+        ax.set_title('Pearson $C_{ij}$ ps')
+        ax.set_yscale('log')
         for (i, pearson_mode) in enumerate(pearson_ps):
-            ax.set_title('ps')
-            ax.plot(pearson_mode, label=f'Potts mode #{i}')
-            ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
-            ax.set_xlabel('iter'); ax.set_ylabel('Pearson $C_{ij}$')
-            ax.legend()
+            x = [abs(1-p) for p in pearson_mode]
+            ax.plot(x, label=f'Potts mode #{i}')
+            # ax.plot(pearson_mode, label=f'Potts mode #{i}')
+            # ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
+        ax.legend()
         fig.suptitle('Pearson on covariances for Potts modes')
         fig.tight_layout()
         
@@ -433,10 +444,11 @@ class CheckpointCallback(Callback):
         self.total_epochs += 1
         if epochs % self.save_every == 0:
             cpu = torch.device('cpu')
-            save_checkpoint(self.checkpoint_filename, self.total_epochs,
-                            model=model.to(cpu), optimizer=optimizer, log_weights=log_weights.to(cpu))
 
-class PottsParamsCallback(Callback):
+            save_checkpoint(self.checkpoint_filename, self.total_epochs,
+                            model=copy.deepcopy(model).to(cpu), optimizer=optimizer, log_weights=copy.deepcopy(log_weights).to(cpu))
+
+class ParamsCallback(Callback):
     def __init__(self, save_every=torch.inf):
         super().__init__()
         self.save_every = save_every
@@ -480,73 +492,20 @@ class PottsParamsCallback(Callback):
                 ax.legend()
         fig.tight_layout()
         return fig, axes
-
-
-
-
-
-    #     self.params_Ns0 = []
-    #     self.grad_Ns0 = []
-    #     self.params_ps = []
-    #     self.grad_ps = []
-
-    # def after_step(self, model, grad_total, epochs, *args, **kwargs):
-    #     if epochs % self.save_every == 0:
-    #         offset = 0
-    #         params_Ns0_round = []
-    #         grad_Ns0_round = []
-    #         if isinstance(model.round_zero, energy_models.Potts):
-    #             potts = model.round_zero.set_zerosum_gauge()
-    #             for (i, p) in enumerate(potts.parameters()):
-    #                 self.params_Ns0_round.append(p)
-    #                 self.grad_Ns0_round.append(grad_total[i + offset])
-    #         self.params_Ns0.append(params_Ns0_round)
-    #         self.grad_Ns0.append(grad_Ns0_round)
-    #         offset += len(list(model.round_zero.parameters()))
-            
-    #         params_ps_round = []
-    #         grad_ps_round = []
-    #         for (mode) in model.selection.modes:
-    #             params_ps_mode = []
-    #             grad_ps_mode = []
-    #             if isinstance(mode, energy_models.Potts):
-    #                 potts = model.round_zero.set_zerosum_gauge()
-    #                 for (i, p) in enumerate(potts.parameters()):
-    #                     params_ps_mode.append(p)
-    #                     grad_ps_mode.append(grad_total[i + offset])
-    #             params_ps_round.append(params_ps_mode)
-    #             grad_ps_round.append(grad_ps_mode)
-    #             offset += len(list(mode.parameters()))
-    #         self.params_ps.append(params_ps_round)
-    #         self.grad_ps.append(grad_ps_round)
-
-    #     return False
     
-    # def plot_params(self, figsize=(10, 4)):
-    #     n_selection_modes = self.model_teacher.selection.get_n_modes()
-    #     fig, axes = plt.subplots(1, n_selection_modes + 1, figsize=figsize)
-    #     if type(axes) != numpy.ndarray: axes = [axes]
+    def plot_diff(self, **kwargs):
+        n_steps = len(self.params)
+        n_params = len(self.param_names)
+        diff = list(zip(*[[torch.median(torch.abs(self.params[n][p] - self.params[n-1][p])).item() for p in range(n_params)] for n in range(n_steps)]))
 
-    #     ax = axes[0]
-    #     ax.set_title('Ns0')
-    #     params_Ns0 = zip(*self.params_Ns0)
-    #     for (param, np) in zip(params_Ns0, self.model_teacher.round_zero.named_parameters()):
-    #         ax.plot(pearson, label=np[0])
-    #         ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
-    #         ax.set_xlabel('iter'); ax.set_ylabel('Pearson')
-    #         ax.legend()
-        
-        
-    #     pearson_ps = zip(*self.pearson_ps)
-    #     for (i, pearson_mode) in enumerate(pearson_ps):
-    #         ax = axes[i+1]
-    #         ax.set_title(f'ps - mode #{i}')
-    #         for (pearson, np) in zip(zip(*pearson_mode), self.model_teacher.selection.modes[i].named_parameters()):
-    #             ax.plot(pearson, label=np[0])
-    #             ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
-    #             ax.set_xlabel('iter'); ax.set_ylabel('Pearson')
-    #             ax.legend()
-    #     fig.suptitle('Correlation between teacher and student parameters')
-    #     fig.tight_layout()
-        
-    #     return fig, axes
+        fig, ax = plt.subplots( **kwargs)
+        for i in range(n_params):
+            ax.plot(self.epochs, diff[i], label=self.param_names[i])
+            ax.set_xlabel('epoch')
+            ax.set_yscale('log')
+            ax.legend()
+
+        ax.set_title('Abs median difference of parameter value wrt previous measure')
+        fig.tight_layout()
+
+        return fig, ax
