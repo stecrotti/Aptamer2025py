@@ -1,10 +1,13 @@
 import torch
 import matplotlib.pyplot as plt
+import matplotlib
 from tqdm.autonotebook import tqdm
 import energy_models
 import IPython
 from utils import compute_pearson, compute_slope
 import utils
+import numpy
+import pathlib
 import numpy
 
 def relative_error(x, y):
@@ -412,3 +415,138 @@ class ConstEnergyCallback(Callback):
         fig.tight_layout()
 
         return fig, ax
+    
+def save_checkpoint(checkpoint_filename, epochs, **kwargs):
+    fn = checkpoint_filename + '_' + str(epochs) + '.pt'
+    dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}' 
+    pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
+    torch.save(kwargs, dirpath / fn)
+    
+class CheckpointCallback(Callback):
+    def __init__(self, save_every = torch.inf, filename = 'model'):
+        super().__init__()
+        self.save_every = save_every
+        self.checkpoint_filename = filename
+        self.total_epochs = 0
+
+    def after_step(self, model, optimizer, log_weights, epochs, *args, **kwargs):
+        self.total_epochs += 1
+        if epochs % self.save_every == 0:
+            cpu = torch.device('cpu')
+            save_checkpoint(self.checkpoint_filename, self.total_epochs,
+                            model=model.to(cpu), optimizer=optimizer, log_weights=log_weights.to(cpu))
+
+class PottsParamsCallback(Callback):
+    def __init__(self, save_every=torch.inf):
+        super().__init__()
+        self.save_every = save_every
+        self.param_names = None
+        self.params = []
+        self.epochs = []
+
+    def after_step(self, model, epochs, *args, **kwargs):
+        if self.param_names is None:
+            self.param_names = [n for (n, p) in model.named_parameters()]
+        if (epochs-1) % self.save_every == 0:
+            self.params.append([p.detach().cpu().clone() for p in model.parameters()])
+            self.epochs.append(epochs)
+        return False
+    
+    def plot(self, figsize=(10, 4), plot_every:int = 1):
+        params = list(zip(*self.params))
+        n_params = len(self.param_names)
+        n_points = len(self.params)
+        assert len(params) == n_params
+        fig, axes = plt.subplots(1, n_params, figsize=figsize)
+        cgrad = [matplotlib.cm.cividis(x) for x in numpy.linspace(0, 1, n_points)]
+
+        for i in range(n_params):
+            ax = axes[i]
+            param_name = self.param_names[i]
+            if param_name.endswith('.J'):
+                transform = utils.off_diagonal_terms
+            else:
+                transform = lambda x: x
+            param = params[i]
+            p_final = transform(param[-1])
+            ax.plot(p_final.reshape(-1), p_final.reshape(-1), color='gray', label='identity', ls='--')
+            for n in range(0, n_points, plot_every):
+                p_current = transform(param[n])
+                ax.scatter(p_current, p_final,
+                    label=f'Epoch {self.epochs[n]}', color=cgrad[n])
+                ax.set_xlabel('Param at epoch n')
+                ax.set_ylabel(f'Param at epoch {self.epochs[-1]}')
+                ax.set_title(param_name)
+                ax.legend()
+        fig.tight_layout()
+        return fig, axes
+
+
+
+
+
+    #     self.params_Ns0 = []
+    #     self.grad_Ns0 = []
+    #     self.params_ps = []
+    #     self.grad_ps = []
+
+    # def after_step(self, model, grad_total, epochs, *args, **kwargs):
+    #     if epochs % self.save_every == 0:
+    #         offset = 0
+    #         params_Ns0_round = []
+    #         grad_Ns0_round = []
+    #         if isinstance(model.round_zero, energy_models.Potts):
+    #             potts = model.round_zero.set_zerosum_gauge()
+    #             for (i, p) in enumerate(potts.parameters()):
+    #                 self.params_Ns0_round.append(p)
+    #                 self.grad_Ns0_round.append(grad_total[i + offset])
+    #         self.params_Ns0.append(params_Ns0_round)
+    #         self.grad_Ns0.append(grad_Ns0_round)
+    #         offset += len(list(model.round_zero.parameters()))
+            
+    #         params_ps_round = []
+    #         grad_ps_round = []
+    #         for (mode) in model.selection.modes:
+    #             params_ps_mode = []
+    #             grad_ps_mode = []
+    #             if isinstance(mode, energy_models.Potts):
+    #                 potts = model.round_zero.set_zerosum_gauge()
+    #                 for (i, p) in enumerate(potts.parameters()):
+    #                     params_ps_mode.append(p)
+    #                     grad_ps_mode.append(grad_total[i + offset])
+    #             params_ps_round.append(params_ps_mode)
+    #             grad_ps_round.append(grad_ps_mode)
+    #             offset += len(list(mode.parameters()))
+    #         self.params_ps.append(params_ps_round)
+    #         self.grad_ps.append(grad_ps_round)
+
+    #     return False
+    
+    # def plot_params(self, figsize=(10, 4)):
+    #     n_selection_modes = self.model_teacher.selection.get_n_modes()
+    #     fig, axes = plt.subplots(1, n_selection_modes + 1, figsize=figsize)
+    #     if type(axes) != numpy.ndarray: axes = [axes]
+
+    #     ax = axes[0]
+    #     ax.set_title('Ns0')
+    #     params_Ns0 = zip(*self.params_Ns0)
+    #     for (param, np) in zip(params_Ns0, self.model_teacher.round_zero.named_parameters()):
+    #         ax.plot(pearson, label=np[0])
+    #         ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
+    #         ax.set_xlabel('iter'); ax.set_ylabel('Pearson')
+    #         ax.legend()
+        
+        
+    #     pearson_ps = zip(*self.pearson_ps)
+    #     for (i, pearson_mode) in enumerate(pearson_ps):
+    #         ax = axes[i+1]
+    #         ax.set_title(f'ps - mode #{i}')
+    #         for (pearson, np) in zip(zip(*pearson_mode), self.model_teacher.selection.modes[i].named_parameters()):
+    #             ax.plot(pearson, label=np[0])
+    #             ax.axhline(y=1, color='r', linestyle='--', linewidth=1, alpha=0.5)
+    #             ax.set_xlabel('iter'); ax.set_ylabel('Pearson')
+    #             ax.legend()
+    #     fig.suptitle('Correlation between teacher and student parameters')
+    #     fig.tight_layout()
+        
+    #     return fig, axes

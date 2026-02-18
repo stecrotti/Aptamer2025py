@@ -73,12 +73,6 @@ def compute_total_gradient(model, grad_model, grad_data):
 
     return grad_total
 
-def save_checkpoint(checkpoint_filename, **kwargs):
-    fn = checkpoint_filename + '_' + utils.datetime_as_string() + '.pt'
-    dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}' 
-    pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
-    torch.save(kwargs, dirpath / fn)
-
 def load_checkpoints(checkpoint_filename):
     cps = []
     dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}'
@@ -107,8 +101,6 @@ def train(
     log_weights: torch.Tensor | None = None,
     optimizer = None,
     lr = 1e-2, 
-    checkpoint_every = torch.inf,
-    checkpoint_filename = 'model',
     data_loaders_valid = None,
     total_reads_valid = None,
     callbacks = [ConvergenceMetricsCallback()],
@@ -184,10 +176,6 @@ def train(
                 epochs += 1
                 converged = (epochs > max_epochs)
 
-                if epochs % checkpoint_every == 0:
-                    save_checkpoint(checkpoint_filename, 
-                                    model=model, optimizer=optimizer, log_weights=log_weights)
-
                 # callbacks
                 for callback in callbacks:
                     c = callback.after_step(model=model, chains=chains, total_reads=total_reads, 
@@ -196,7 +184,8 @@ def train(
                                 data_loaders_valid=data_loaders_valid, total_reads_valid=total_reads_valid,
                                 log_likelihood = log_likelihood, epochs=epochs,
                                 grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
-                            target_pearson=target_pearson, thresh_slope=thresh_slope)
+                                target_pearson=target_pearson, thresh_slope=thresh_slope,
+                                optimizer=optimizer, log_weights=log_weights)
                 converged = converged or c
                 
             if converged:
