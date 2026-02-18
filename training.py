@@ -181,12 +181,12 @@ def train(
                     log_weights[t] += energy_prev - energies_AIS[t]
                 model_prev = copy.deepcopy(model).requires_grad_(False)
 
+                epochs += 1
+                converged = (epochs > max_epochs)
+
                 if epochs % checkpoint_every == 0:
                     save_checkpoint(checkpoint_filename, 
                                     model=model, optimizer=optimizer, log_weights=log_weights)
-
-                epochs += 1
-                converged = (epochs > max_epochs)
 
                 # callbacks
                 for callback in callbacks:
