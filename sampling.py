@@ -206,3 +206,31 @@ def simulated_annealing(chains, compute_energy, n_steps, beta_schedule, callback
             callback(chains, energies, beta)
 
     return chains, energies
+
+@torch.no_grad
+def annealed_importance_sampling(chains, compute_energy, 
+                                 n_sweeps = 1,
+                                 beta_schedule = torch.arange(0.01, 1+0.01, 0.01)):
+    
+    log_weights = torch.zeros(len(chains), dtype=chains.dtype)
+    beta_prev = 0.0
+    
+    for beta in beta_schedule:
+        chains, energy = _sample_metropolis(chains, compute_energy, n_sweeps, beta=beta)
+        log_weights += (beta_prev - beta) * energy 
+        beta_prev = beta
+
+    return log_weights, chains
+
+@torch.no_grad
+def estimate_normalizations(model, chains, n_sweeps, beta_schedule):
+    n_rounds, n_chains, L, q = chains.size()
+    logZt = torch.zeros(n_rounds, dtype=chains.dtype, device=chains.device)
+    log_weights_all = []
+    for t in range(n_rounds):
+        compute_energy = lambda x: model.compute_energy_up_to_round(x, t)
+        log_weights, _ = annealed_importance_sampling(chains[t], compute_energy, n_sweeps, beta_schedule)
+        log_weights_all.append(log_weights)
+        logZt[t] = log_weights.logsumexp(0) - torch.log(torch.tensor([log_weights.size(0)])) + L*torch.log(torch.tensor([q]))
+
+    return logZt, log_weights_all
