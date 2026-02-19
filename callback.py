@@ -436,14 +436,16 @@ def save_checkpoint(checkpoint_filename, epochs, **kwargs):
     torch.save(kwargs, dirpath / fn)
     
 class CheckpointCallback(Callback):
-    def __init__(self, save_every = torch.inf, filename = 'model'):
+    def __init__(self, save_every = torch.inf, filename = 'model', delete_old_checkpoints = True):
         super().__init__()
         self.save_every = save_every
         self.checkpoint_filename = filename
         self.total_epochs = 0
-        dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{filename}' 
-        if dirpath.is_dir():
-            shutil.rmtree(dirpath, ignore_errors=True)
+
+        if delete_old_checkpoints:
+            dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{filename}' 
+            if dirpath.is_dir():
+                shutil.rmtree(dirpath, ignore_errors=True)
 
     def before_training(self, *args, **kwargs):
         super().before_training(*args, **kwargs)
@@ -463,13 +465,15 @@ class ParamsCallback(Callback):
         self.param_names = None
         self.params = []
         self.epochs = []
+        self.last_epoch = 1 - self.save_every
 
     def after_step(self, model, epochs, *args, **kwargs):
         if self.param_names is None:
             self.param_names = [n for (n, p) in model.named_parameters()]
         if (epochs-1) % self.save_every == 0:
             self.params.append([p.detach().cpu().clone() for p in model.parameters()])
-            self.epochs.append(epochs)
+            curr_epoch = self.last_epoch + self.save_every
+            self.epochs.append(curr_epoch)
         return False
     
     def plot(self, figsize=(10, 4), plot_every:int = 1, cmap=matplotlib.cm.viridis):
