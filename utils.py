@@ -144,7 +144,7 @@ def sequences_counts_from_files(experiment_id: str, round_ids, verbose=True):
     counts = []
     logmult = []
     for round_id in round_ids:
-        s, su, c, l = sequences_from_file(experiment_id, round_id)
+        s, su, c, l = sequences_counts_from_file(experiment_id, round_id)
         sequences.append(s)
         sequences_unique.append(su)
         counts.append(c)
@@ -469,18 +469,23 @@ def epistasis(compute_energy, wt_oh):
     
     return DDE
 
-def unique_sequences_counts_enrichments(sequences, verbose=True):
+def unique_sequences_counts_enrichments(sequences, 
+                                        sequences_unique = None,
+                                        counts = None,
+                                        verbose=True,
+                                        return_enrichments=True):
     n_rounds = len(sequences)
-    if verbose:
-        print('Extracting unique sequences and counts at each round...')
-    sequences_unique, inverse_indices, counts = zip(*[
-        torch.unique(seq_t, dim=0, return_inverse=True, return_counts=True)
-        for seq_t in sequences])
+    if (sequences_unique is None) or (counts is None): 
+        if verbose:
+            print('Extracting unique sequences and counts at each round...')
+        sequences_unique, counts = zip(*[
+            torch.unique(seq_t, dim=0, return_counts=True)
+            for seq_t in sequences])
     shifts = torch.cat((torch.tensor([0]), torch.cumsum(torch.tensor([len(s) for s in sequences_unique]), 0)), 0)[:-1]
     seq_unique_all = torch.cat(sequences_unique, dim=0)  
     if verbose:
         print('Merging sequences from all rounds in a single container...')
-    sequences_unique_all, inverse_indices_all, counts_all = torch.unique(seq_unique_all, dim=0, return_inverse=True, return_counts=True)
+    sequences_unique_all, inverse_indices_all = torch.unique(seq_unique_all, dim=0, return_inverse=True)
     n_seq_tot = len(sequences_unique_all)
     if verbose:
         print('Assigning counts at each round to unique sequences...')
@@ -493,13 +498,16 @@ def unique_sequences_counts_enrichments(sequences, verbose=True):
             seq_id = inverse_indices_all[shifts[t] + i]
             counts_t[seq_id] += c
         counts_unique.append(counts_t)
-    if verbose:
-        print('Calculating enrichments...')
-    enrichments = [counts_unique[t+1] / counts_unique[t] for t in range(n_rounds-1)]
+    if return_enrichments:
+        if verbose:
+            print('Calculating enrichments...')
+        enrichments = [counts_unique[t+1] / counts_unique[t] for t in range(n_rounds-1)]
     if verbose:
         print('Finished')
-
-    return sequences_unique_all, counts_unique, enrichments
+    if return_enrichments:
+        return sequences_unique_all, counts_unique, enrichments
+    else:
+        return sequences_unique_all, counts_unique
 
 def _discard_cumsum_below(populations, thresh):
     populations = populations / populations.sum(0, keepdim=True)

@@ -474,6 +474,7 @@ class ParamsCallback(Callback):
             self.params.append([p.detach().cpu().clone() for p in model.parameters()])
             curr_epoch = self.last_epoch + self.save_every
             self.epochs.append(curr_epoch)
+            self.last_epoch = curr_epoch
         return False
     
     def plot(self, figsize=(10, 4), plot_every:int = 1, cmap=matplotlib.cm.viridis):
