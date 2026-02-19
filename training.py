@@ -92,7 +92,6 @@ def train(
     model: selex_distribution.MultiRoundDistribution,
     data_loaders,
     total_reads: torch.IntTensor,
-    log_multinomial_factors: torch.Tensor,
     chains: torch.Tensor,
     n_sweeps: int,   
     max_epochs: int,
@@ -104,6 +103,8 @@ def train(
     lr = 1e-2, 
     data_loaders_valid = None,
     total_reads_valid = None,
+    log_multinomial_factors = None,
+    log_multinomial_factors_valid = None,
     callbacks = [ConvergenceMetricsCallback()],
     update_chains = update_chains_default()
 ):
@@ -112,12 +113,14 @@ def train(
     n_rounds, n_chains, L, q = chains.size()
     ts = torch.arange(n_rounds, device=device)
     assert chains.shape[0] == n_rounds
-    pre_factor = total_reads + log_multinomial_factors
-    normalized_pre_factor = pre_factor / pre_factor.sum(0, keepdim=True)
 
-    log_n_chains = torch.log(torch.tensor(n_chains, device=device, dtype=dtype)).item()
-    energies_AIS = [model.compute_energy_up_to_round(chains[t], t) for t in ts]
-    model_prev = copy.deepcopy(model)
+    if log_multinomial_factors is None:
+        log_multinomial_factors = torch.zeros(n_rounds)
+
+    log_likelihood_normaliz = (total_reads + log_multinomial_factors).sum().item()
+
+    # log_n_chains = torch.log(torch.tensor(n_chains, device=device, dtype=dtype)).item()
+    energies_AIS = [torch.zeros_like(chains[t]) for t in ts]
     Llogq = L * torch.log(torch.tensor(q, device=device, dtype=dtype)).item()
 
     if optimizer is None:
@@ -145,15 +148,16 @@ def train(
 
                 # compute gradient
                 L_m = compute_moments_at_round(model, chains[t].clone(), t)
-                L_model = L_model + normalized_pre_factor[t] * L_m
+                L_model += total_reads[t] * L_m / log_likelihood_normaliz
                 
                 # extract batch of data from round t
                 data_batch = batches[t]
                 L_d = compute_moments_at_round(model, data_batch, t)
-                L_data = L_data + normalized_pre_factor[t] * L_d
-                logZt = Llogq + (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
-                Lt = L_d.detach().clone() - logZt
-                log_likelihood += (normalized_pre_factor[t] * Lt).item()
+                L_data += total_reads[t] * L_d / log_likelihood_normaliz
+                # logZt = Llogq + (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
+                # Lt = L_d.detach().clone() - logZt
+                # log_likelihood += (log_multinomial_factors[t] + total_reads[t] * Lt).item()
+            # log_likelihood /= log_likelihood_normaliz
 
             # Compute gradient
             grad_model = compute_grad_model(model, L_model, retain_graph=True)
@@ -163,17 +167,20 @@ def train(
             optimizer.step()
 
             if data_loaders_valid is not None:
+                if log_multinomial_factors_valid is None:
+                    raise ValueError("Validation set was provided, but not the corresponding log-multinomial factors.")
                 batches = [next(iter(dl)) for dl in data_loaders_valid]
-                log_likelihood_valid = estimate_log_likelihood(model, batches, total_reads_valid, log_weights)
+                log_likelihood_valid = estimate_log_likelihood(model, batches, total_reads_valid, log_weights,
+                                                               log_multinomial_factors_valid)
             else:
                 log_likelihood_valid = None
 
             with torch.no_grad():
                 # update logweights for importance sampling estimate of normalization constant
                 for t in ts:
-                    energy_prev = model_prev.compute_energy_up_to_round(chains[t], t)
-                    log_weights[t] += energy_prev - energies_AIS[t]
-                model_prev = copy.deepcopy(model).requires_grad_(False)
+                    energy_new = model.compute_energy_up_to_round(chains[t], t)
+                    log_weights[t] += energies_AIS[t] - energy_new
+                log_likelihood = estimate_log_likelihood(model, batches, total_reads, log_weights, log_multinomial_factors)
 
                 epochs += 1
                 converged = (epochs > max_epochs)
@@ -182,12 +189,13 @@ def train(
                 for callback in callbacks:
                     c = callback.after_step(model=model, chains=chains, total_reads=total_reads, 
                                 data_loaders=data_loaders, log_likelihood_valid=log_likelihood_valid, 
-                                model_prev=model_prev,
+                                og_multinomial_factors=log_multinomial_factors,
                                 data_loaders_valid=data_loaders_valid, total_reads_valid=total_reads_valid,
                                 log_likelihood = log_likelihood, epochs=epochs,
                                 grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
                                 target_pearson=target_pearson, thresh_slope=thresh_slope,
-                                optimizer=optimizer, log_weights=log_weights)
+                                optimizer=optimizer, log_weights=log_weights,
+                                log_multinomial_factors_valid=log_multinomial_factors_valid)
                 converged = converged or c
                 
             if converged:
@@ -206,13 +214,13 @@ def estimate_logprobability_up_to_round(model, x: torch.tensor, t, log_weights: 
     return logp
 
 @torch.no_grad
-def estimate_log_likelihood(model, batches, total_reads, log_weights):
+def estimate_log_likelihood(model, batches, total_reads, log_weights, log_multinomial_factors):
     n_rounds = len(batches)
     assert len(log_weights) == n_rounds
-    normalized_total_reads = total_reads / total_reads.sum(0, keepdim=True)
+    log_likelihood_normaliz = (total_reads + log_multinomial_factors).sum().item()
     log_likelihood = 0.0
     for t in range(n_rounds):
         Lt = estimate_logprobability_up_to_round(model, batches[t], t, log_weights[t])
-        log_likelihood += (normalized_total_reads[t] * Lt).item()
+        log_likelihood += (log_multinomial_factors[t] + total_reads[t] * Lt).item()
 
-    return log_likelihood
+    return log_likelihood / log_likelihood_normaliz
