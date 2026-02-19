@@ -640,3 +640,6 @@ def best_device(verbose=True):
     if verbose:
         print(f'Selected device: {device}')
     return device
+
+def logfactorial(x:int):
+    return torch.lgamma(x+1)

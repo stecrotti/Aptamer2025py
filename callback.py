@@ -10,6 +10,7 @@ import numpy
 import pathlib
 import numpy
 import copy
+import shutil
 
 def relative_error(x, y):
     x = x.reshape(-1)
@@ -25,6 +26,7 @@ class Callback:
     def after_step(self, *args, **kwargs):
         return False
 
+# TODO: save also some info about gradient persistance (e.g. cosine similarity t,t+1 over a window) and how parameters change
 class ConvergenceMetricsCallback(Callback):
     def __init__(self, progress_bar=True, progress_plot=False):
         super().__init__()
@@ -439,6 +441,12 @@ class CheckpointCallback(Callback):
         self.save_every = save_every
         self.checkpoint_filename = filename
         self.total_epochs = 0
+        dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{filename}' 
+        if dirpath.is_dir():
+            shutil.rmtree(dirpath, ignore_errors=True)
+
+    def before_training(self, *args, **kwargs):
+        super().before_training(*args, **kwargs)
 
     def after_step(self, model, optimizer, log_weights, epochs, *args, **kwargs):
         self.total_epochs += 1
@@ -470,7 +478,7 @@ class ParamsCallback(Callback):
         n_points = len(self.params)
         assert len(params) == n_params
         fig, axes = plt.subplots(1, n_params, figsize=figsize)
-        cgrad = [matplotlib.cm.cividis(x) for x in numpy.linspace(0, 1, n_points)]
+        cgrad = [matplotlib.cm.viridis(x) for x in numpy.linspace(0, 1, n_points)]
 
         for i in range(n_params):
             ax = axes[i]
