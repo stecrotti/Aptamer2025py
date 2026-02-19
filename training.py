@@ -231,7 +231,8 @@ def estimate_log_likelihood_AIS(model, batches, total_reads, log_multinomial_fac
     x = batches[0][0]
     L, q = x.size()
     dtype = x.dtype
-    chains = init_chains(len(batches), n_chains, L, q, dtype=dtype)
-    beta_schedule = torch.arange(step, 1+step, step)
+    device = x.device
+    chains = init_chains(len(batches), n_chains, L, q, dtype=dtype, device=device)
+    beta_schedule = torch.arange(step, 1+step, step).to(dtype=dtype, device=device)
     _, log_weights = sampling.estimate_normalizations(model, chains, n_sweeps, beta_schedule)
     return estimate_log_likelihood(model, batches, total_reads, log_weights, log_multinomial_factors)

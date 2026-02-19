@@ -212,7 +212,7 @@ def annealed_importance_sampling(chains, compute_energy,
                                  n_sweeps = 1,
                                  beta_schedule = torch.arange(0.01, 1+0.01, 0.01)):
     
-    log_weights = torch.zeros(len(chains), dtype=chains.dtype)
+    log_weights = torch.zeros(len(chains), dtype=chains.dtype, device=chains.device)
     beta_prev = 0.0
     
     for beta in beta_schedule:
@@ -231,6 +231,6 @@ def estimate_normalizations(model, chains, n_sweeps, beta_schedule):
         compute_energy = lambda x: model.compute_energy_up_to_round(x, t)
         log_weights, _ = annealed_importance_sampling(chains[t], compute_energy, n_sweeps, beta_schedule)
         log_weights_all.append(log_weights)
-        logZt[t] = log_weights.logsumexp(0) - torch.log(torch.tensor([log_weights.size(0)])) + L*torch.log(torch.tensor([q]))
+        logZt[t] = log_weights.logsumexp(0).item() - torch.log(torch.tensor([log_weights.size(0)])).item() + L*torch.log(torch.tensor([q])).item()
 
     return logZt, log_weights_all
