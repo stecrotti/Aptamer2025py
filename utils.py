@@ -469,11 +469,11 @@ def epistasis(compute_energy, wt_oh):
     
     return DDE
 
-def sequences_unique_counts(sequences, 
-                            sequences_unique = None,
-                            counts = None,
-                            verbose = True,
-                            return_enrichments = False):
+def group_rounds(sequences, 
+                sequences_unique = None,
+                counts = None,
+                verbose = True,
+                return_enrichments = False):
     n_rounds = len(sequences)
     if (sequences_unique is None) or (counts is None): 
         if verbose:
