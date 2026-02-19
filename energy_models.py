@@ -47,7 +47,7 @@ class IndepSites(EnergyModel):
         return (- self.h * p).sum()
 
     def lognormalization(self):
-        return torch.logsumexp(self.h, dim=1).sum()
+        return torch.logsumexp(self.h, dim=1).sum().item()
     
     def normalize(self):
         logZ = self.lognormalization().detach()

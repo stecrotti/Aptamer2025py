@@ -70,8 +70,8 @@ def log_factorial(x: int | torch.IntTensor):
     else:
         return lf
 
-def log_multinomial(N, n):
-    assert n.sum() == N
+def log_multinomial(n):
+    N = n.sum().item()
     logNfact = log_factorial(N)
     lognfact = log_factorial(n).sum().item()
     logmult = logNfact - lognfact
@@ -117,7 +117,8 @@ def sequences_from_file(experiment_id: str, round_id: str,
 def sequences_unique_and_counts(sequences): 
     n_sequences = len(sequences)
     sequences_unique, counts = torch.unique(sequences, dim=0, return_counts=True)
-    logmult = log_multinomial(n_sequences, counts)
+    assert counts.sum() == n_sequences
+    logmult = log_multinomial(counts)
     
     return sequences_unique, counts, logmult
 
@@ -137,12 +138,20 @@ def sequences_from_files(experiment_id: str, round_ids, verbose=True):
 
     return sequences
 
-def sequences_counts_from_files(*args, **kwargs):
-    sequences = sequences_from_files(*args, **kwargs)
-    sequences_unique, counts, logmult = zip(*[sequences_unique_and_counts(s)
-                                              for s in sequences])
+def sequences_counts_from_files(experiment_id: str, round_ids, verbose=True):
+    sequences = []
+    sequences_unique = []
+    counts = []
+    logmult = []
+    for round_id in round_ids:
+        s, su, c, l = sequences_from_file(experiment_id, round_id)
+        sequences.append(s)
+        sequences_unique.append(su)
+        counts.append(c)
+        logmult.append(l)
+        if verbose: print(f"Finished round {round_id}")
     
-    return sequences, sequences_unique, torch.IntTensor(counts), torch.Tensor(logmult)
+    return sequences, sequences_unique, counts, torch.tensor(logmult)
 
 def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):         
     dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()   
