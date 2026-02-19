@@ -472,13 +472,13 @@ class ParamsCallback(Callback):
             self.epochs.append(epochs)
         return False
     
-    def plot(self, figsize=(10, 4), plot_every:int = 1):
+    def plot(self, figsize=(10, 4), plot_every:int = 1, cmap=matplotlib.cm.viridis):
         params = list(zip(*self.params))
         n_params = len(self.param_names)
         n_points = len(self.params)
         assert len(params) == n_params
         fig, axes = plt.subplots(1, n_params, figsize=figsize)
-        cgrad = [matplotlib.cm.viridis(x) for x in numpy.linspace(0, 1, n_points)]
+        cgrad = [cmap(x) for x in numpy.linspace(0, 1, n_points)]
 
         for i in range(n_params):
             ax = axes[i]
