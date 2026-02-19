@@ -58,33 +58,29 @@ def one_hot(x: torch.Tensor, num_classes: int = -1, dtype: torch.dtype = torch.f
     """
     return _one_hot(x, num_classes, dtype)
 
+def log_factorial(x: int | torch.IntTensor):
+    isscalar = isinstance(x, int)
+    if isscalar:
+        y = torch.IntTensor([x])
+    else:
+        y = x
+    lf = torch.lgamma(y+1)
+    if isscalar:
+        return lf.item()
+    else:
+        return lf
+
+def log_multinomial(N, n):
+    assert n.sum() == N
+    logNfact = log_factorial(N)
+    lognfact = log_factorial(n).sum().item()
+    logmult = logNfact - lognfact
+    return logmult
 
 def import_from_fasta(
     fasta_name: str | Path,
-    tokens: str | None = None,
-    filter_sequences: bool = False,
-    remove_duplicates: bool = False,
-    return_mask: bool = False):
+    tokens: str | None = None):
 
-    """Import sequences from a fasta or compressed fasta (.fas.gz) file. The following operations are performed:
-    - If 'tokens' is provided, encodes the sequences in numeric format.
-    - If 'filter_sequences' is True, removes the sequences whose tokens are not present in the alphabet.
-    - If 'remove_duplicates' is True, removes the duplicated sequences.
-    - If 'return_ids' is True, returns also the indices of the original sequences.
-
-    Args:
-        fasta_name (str | Path): Path to the fasta or compressed fasta (.fas.gz) file.
-        tokens (str | None, optional): Alphabet to be used for the encoding. If provided, encodes the sequences in numeric format.
-        filter_sequences (bool, optional): If True, removes the sequences whose tokens are not present in the alphabet. Defaults to False.
-        remove_duplicates (bool, optional): If True, removes the duplicated sequences. Defaults to False.
-        return_ids (bool, optional): If True, returns also the indices of the original sequences. Defaults to False.
-
-    Raises:
-        RuntimeError: The file is not in fasta format.
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray] | Tuple[np.ndarray, np.ndarray, np.ndarray]: Tuple of (headers, sequences) or (headers, sequences, original_ids) if 'return_ids' is True.
-    """
     # Open the file, handling both .fasta and .fas.gz formats
     if str(fasta_name).endswith(".gz"):
         with gzip.open(fasta_name, "rt") as fasta_file: 
@@ -100,69 +96,38 @@ def import_from_fasta(
         names.append(str(record.id))
         sequences.append(str(record.seq))
     
-    # Filter sequences
-    if filter_sequences:
-        if tokens is None:
-            raise ValueError("Argument 'tokens' must be provided if 'filter_sequences' is True.")
-        tokens = get_tokens(tokens)
-        tokens_list = [a for a in tokens]
-        clean_names = []
-        clean_sequences = []
-        clean_mask = []
-        for n, s in zip(names, sequences):
-            if all(c in tokens_list for c in s):
-                if n == "":
-                    n = "unknown_sequence"
-                clean_names.append(n)
-                clean_sequences.append(s)
-                clean_mask.append(True)
-            else:
-                print(f"Unknown token found: removing sequence {n}")
-                clean_mask.append(False)
-        names = np.array(clean_names)
-        sequences = np.array(clean_sequences)
-        mask = np.array(clean_mask)
-        
-    else:
-        names = np.array(names)
-        sequences = np.array(sequences)
-        mask = np.full(len(sequences), True)
-    
-    # Remove duplicates
-    if remove_duplicates:
-        sequences, unique_ids = np.unique(sequences, return_index=True)
-        # sort to preserve the original order
-        order = np.argsort(unique_ids)
-        sequences = sequences[order]
-        names = names[unique_ids[order]]
-        # set to false the mask elements corresponding to the duplicates
-        original_indices_post_filtering = np.where(mask)[0]
-        original_indices_of_unique_items = original_indices_post_filtering[unique_ids]
-        mask_unique = np.full(len(mask), False)
-        mask_unique[original_indices_of_unique_items] = True
-        mask = mask & mask_unique
+    names = np.array(names)
+    sequences = np.array(sequences)
         
     if (tokens is not None) and (len(sequences) > 0):
-        sequences = encode_sequence(sequences, tokens)
-        
-    out = (names, sequences)
-    if return_mask:
-        out = out + (mask,)
+        sequences_encoded = encode_sequence(sequences, tokens)
     
-    return out
+    return sequences_encoded
 
 def sequences_from_file(experiment_id: str, round_id: str, 
                         device=torch.device("cpu")): 
     dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()
     filepath = dirpath / (experiment_id + round_id + "_merged.fastq_result.fas.gz")
     tokens = "ACGT"
-    headers, sequences = import_from_fasta(filepath, tokens=tokens, filter_sequences=False, remove_duplicates=False)
+    sequences = import_from_fasta(filepath, tokens=tokens)
     seq = torch.tensor(sequences, device=device, dtype=torch.int32)
     
     return seq
 
-def sequences_from_files(experiment_id: str, round_ids, 
-                        device=torch.device("cpu"), verbose=True):
+def sequences_unique_and_counts(sequences): 
+    n_sequences = len(sequences)
+    sequences_unique, counts = torch.unique(sequences, dim=0, return_counts=True)
+    logmult = log_multinomial(n_sequences, counts)
+    
+    return sequences_unique, counts, logmult
+
+def sequences_counts_from_file(*args, **kwargs):
+    sequences = sequences_from_file(*args, **kwargs)
+    sequences_unique, counts, logmult = sequences_unique_and_counts(sequences)
+
+    return sequences, sequences_unique, counts, logmult
+
+def sequences_from_files(experiment_id: str, round_ids, verbose=True):
     sequences = []
     if verbose: print('Extracting sequences...')
     for round_id in round_ids:
@@ -171,6 +136,13 @@ def sequences_from_files(experiment_id: str, round_ids,
         if verbose: print(f"Finished round {round_id}")
 
     return sequences
+
+def sequences_counts_from_files(*args, **kwargs):
+    sequences = sequences_from_files(*args, **kwargs)
+    sequences_unique, counts, logmult = zip(*[sequences_unique_and_counts(s)
+                                              for s in sequences])
+    
+    return sequences, sequences_unique, torch.IntTensor(counts), torch.Tensor(logmult)
 
 def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):         
     dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()   
@@ -640,6 +612,3 @@ def best_device(verbose=True):
     if verbose:
         print(f'Selected device: {device}')
     return device
-
-def logfactorial(x:int):
-    return torch.lgamma(x+1)
