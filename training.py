@@ -169,8 +169,8 @@ def train(
             if data_loaders_valid is not None:
                 if log_multinomial_factors_valid is None:
                     raise ValueError("Validation set was provided, but not the corresponding log-multinomial factors.")
-                batches = [next(iter(dl)) for dl in data_loaders_valid]
-                log_likelihood_valid = estimate_log_likelihood(model, batches, total_reads_valid, log_weights,
+                batches_valid = [next(iter(dl)) for dl in data_loaders_valid]
+                log_likelihood_valid = estimate_log_likelihood(model, batches_valid, total_reads_valid, log_weights,
                                                                log_multinomial_factors_valid)
             else:
                 log_likelihood_valid = None
@@ -224,3 +224,14 @@ def estimate_log_likelihood(model, batches, total_reads, log_weights, log_multin
         log_likelihood += (log_multinomial_factors[t] + total_reads[t] * Lt).item()
 
     return log_likelihood / log_likelihood_normaliz
+
+@torch.no_grad
+def estimate_log_likelihood_AIS(model, batches, total_reads, log_multinomial_factors, 
+                                n_chains, n_sweeps, step):
+    x = batches[0][0]
+    L, q = x.size()
+    dtype = x.dtype
+    chains = init_chains(len(batches), n_chains, L, q, dtype=dtype)
+    beta_schedule = torch.arange(step, 1+step, step)
+    _, log_weights = sampling.estimate_normalizations(model, chains, n_sweeps, beta_schedule)
+    return estimate_log_likelihood(model, batches, total_reads, log_weights, log_multinomial_factors)
