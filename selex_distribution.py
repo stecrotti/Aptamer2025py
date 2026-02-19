@@ -78,7 +78,7 @@ class MultiRoundDistribution(torch.nn.Module):
         if t == 0:
             return torch.zeros(x.size(0))
         abs_selection_strength = torch.square(self.selection_strength)
-        normalized_selection_strength = abs_selection_strength / abs_selection_strength.sum(0, keepdim=True)
+        normalized_selection_strength = abs_selection_strength / abs_selection_strength.mean(0, keepdim=True)
         return self.selection.compute_energy(x, selected=self.selected_modes[t-1:t], 
                                              selection_strength=normalized_selection_strength[t-1:t])
 
@@ -87,7 +87,7 @@ class MultiRoundDistribution(torch.nn.Module):
         if t == 0:
             return torch.zeros(x.size(0), device=x.device)
         ancestors = self.tree.ancestors_of(t-1)
-        normalized_selection_strength = self.selection_strength / self.selection_strength.sum(0, keepdim=True)
+        normalized_selection_strength = self.selection_strength / self.selection_strength.mean(0, keepdim=True)
         return self.selection.compute_energy(x, selected=self.selected_modes[ancestors],
                                              selection_strength=normalized_selection_strength[ancestors])
 
@@ -115,8 +115,6 @@ class MultiRoundDistribution(torch.nn.Module):
         self.selected_modes = fn(self.selected_modes)
         if not self.learn_selection_strength:
             self.selection_strength = fn(self.selection_strength)
-        # self.round_zero = self.round_zero._apply(fn)
-        # self.selection = self.selection._apply(fn)
         
         return self
 
