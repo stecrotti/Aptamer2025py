@@ -91,7 +91,8 @@ def load_checkpoints(checkpoint_filename):
 def train(
     model: selex_distribution.MultiRoundDistribution,
     data_loaders,
-    total_reads,
+    total_reads: torch.IntTensor,
+    log_multinomial_factors: torch.Tensor,
     chains: torch.Tensor,
     n_sweeps: int,   
     max_epochs: int,
@@ -111,7 +112,8 @@ def train(
     n_rounds, n_chains, L, q = chains.size()
     ts = torch.arange(n_rounds, device=device)
     assert chains.shape[0] == n_rounds
-    normalized_total_reads = total_reads / total_reads.sum(0, keepdim=True)
+    pre_factor = total_reads + log_multinomial_factors
+    normalized_pre_factor = pre_factor / pre_factor.sum(0, keepdim=True)
 
     log_n_chains = torch.log(torch.tensor(n_chains, device=device, dtype=dtype)).item()
     energies_AIS = [model.compute_energy_up_to_round(chains[t], t) for t in ts]
@@ -143,15 +145,15 @@ def train(
 
                 # compute gradient
                 L_m = compute_moments_at_round(model, chains[t].clone(), t)
-                L_model = L_model + normalized_total_reads[t] * L_m
+                L_model = L_model + normalized_pre_factor[t] * L_m
                 
                 # extract batch of data from round t
                 data_batch = batches[t]
                 L_d = compute_moments_at_round(model, data_batch, t)
-                L_data = L_data + normalized_total_reads[t] * L_d
+                L_data = L_data + normalized_pre_factor[t] * L_d
                 logZt = Llogq + (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
                 Lt = L_d.detach().clone() - logZt
-                log_likelihood += (normalized_total_reads[t] * Lt).item()
+                log_likelihood += (normalized_pre_factor[t] * Lt).item()
 
             # Compute gradient
             grad_model = compute_grad_model(model, L_model, retain_graph=True)
