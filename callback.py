@@ -252,7 +252,7 @@ class PearsonCovarianceCallback(Callback):
             if isinstance(mode, energy_models.Potts):
                 pearson_ps_mode = compute_potts_covariance(
                     grad_data[1+offset], grad_data[0+offset]*2, grad_model[1+offset], grad_model[0+offset]*2)
-            pearson_ps_round.append(pearson_ps_mode)
+                pearson_ps_round.append(pearson_ps_mode)
             offset += len(list(mode.parameters()))
         self.pearson_ps.append(pearson_ps_round)
 
