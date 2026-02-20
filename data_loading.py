@@ -117,7 +117,7 @@ def train_test_split_plot(counts_round, lims_high, lims_low, n_high, n_low):
     print(f'Training sequences (unique): {n_train}')
     print(f'Validation sequences (unique): {n_valid}')
     
-    fig, ax = plt.subplots(figsize=(4,2))
+    fig, ax = plt.subplots(figsize=(3,2))
     colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
     ax.hist(counts_round[valid_idx_low], bins=torch.logspace(0, 4, 100), color=colors[0], alpha=0.1)
     ax.hist(counts_round[idx_low], bins=torch.logspace(0, 4, 100), label='low count', color=colors[0])
@@ -126,7 +126,7 @@ def train_test_split_plot(counts_round, lims_high, lims_low, n_high, n_low):
     ax.set_xscale('log'); ax.set_yscale('log')
     ax.set_xlabel('count')
     ax.legend()
-    ax.set_title('Counts of unique sequences at round 0', fontsize=9)
+    ax.set_title('Counts of unique sequences at round 0', fontsize=10)
 
     return idx_train, idx_valid
 
