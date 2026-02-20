@@ -153,6 +153,52 @@ def sequences_counts_from_files(experiment_id: str, round_ids, verbose=True):
     
     return sequences, sequences_unique, counts, torch.tensor(logmult)
 
+def sequences_from_files_detailed(experiment_id: str, round_ids, verbose=True, return_enrichments=False):
+    n_rounds = len(round_ids)
+
+    sequences = []
+    sequences_unique = []
+    counts = []
+    log_multinomial_factors = []
+    
+    if verbose: print(f'Extracting sequences from {n_rounds} files...')
+    for t in range(n_rounds):
+        s, su, c, l = sequences_counts_from_file(experiment_id, round_ids[t])
+        sequences.append(s)
+        sequences_unique.append(su)
+        counts.append(c)
+        log_multinomial_factors.append(l)
+        if verbose: print(f"Finished round {round_ids[t]}")
+    log_multinomial_factors = torch.tensor(log_multinomial_factors)
+        
+    shifts = torch.cat((torch.tensor([0]), torch.cumsum(torch.tensor([len(s) for s in sequences_unique]), 0)), 0)[:-1]
+    seq_unique_all = torch.cat(sequences_unique, dim=0)  
+    if verbose:
+        print('Merging sequences from all rounds in a single container...')
+    sequences_unique_all, inverse_indices_all = torch.unique(seq_unique_all, dim=0, return_inverse=True)
+    n_seq_tot = len(sequences_unique_all)
+    if verbose:
+        print('Assigning counts at each round to unique sequences...')
+    counts_unique = []
+    for t in range(n_rounds):
+        print(f'\tStarting round {round_ids[t]}...')
+        counts_t = torch.zeros(n_seq_tot, dtype=torch.int)
+        for i in range(len(counts[t])):
+            c = counts[t][i]
+            seq_id = inverse_indices_all[shifts[t] + i]
+            counts_t[seq_id] += c
+        counts_unique.append(counts_t)
+    if return_enrichments:
+        if verbose:
+            print('Calculating enrichments...')
+        enrichments = [counts_unique[t+1] / counts_unique[t] for t in range(n_rounds-1)]
+    if verbose:
+        print('Finished')
+    if return_enrichments:
+        return sequences, sequences_unique, counts, log_multinomial_factors, sequences_unique_all, counts_unique, enrichments
+    else:
+        return sequences, sequences_unique, counts, log_multinomial_factors, sequences_unique_all, counts_unique
+
 def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):         
     dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()   
     filepath = dirpath / (experiment_id + "_" + round_id + ".fasta")

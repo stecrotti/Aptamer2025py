@@ -17,3 +17,6 @@ experiments/img/
 
 # model checkpoints
 experiments/checkpoints/
+
+# potentially large files
+experiments/saved/train_test_split/
