@@ -87,6 +87,9 @@ class SelexRoundDataLoaderIterator:
 #     return data_loaders_train, data_loaders_valid
 
 def train_test_split_plot(counts_round, lims_high, lims_low, n_high, n_low):
+    assert lims_high[0] <= lims_high[1]
+    assert lims_low[0] <= lims_low[1]
+    assert lims_low[1] < lims_high[0]
     n_seq_unique = len(counts_round)
     
     valid_idx_high_bool = (lims_high[0] <= counts_round) * (counts_round <= lims_high[1])
@@ -96,7 +99,7 @@ def train_test_split_plot(counts_round, lims_high, lims_low, n_high, n_low):
     valid_idx_high = torch.arange(n_seq_unique)[valid_idx_high_bool].tolist()
     valid_idx_low = torch.arange(n_seq_unique)[valid_idx_low_bool].tolist()
     
-    print(f'Found {nlow} unique sequences with low count and {nhigh} unique sequences with high count')
+    print(f'Selected {n_low}/{nlow} unique sequences with low count and {n_high}/{nhigh} unique sequences with high count')
 
     idx_high = random.sample(valid_idx_high, n_high)
     idx_low = random.sample(valid_idx_low, n_low)
