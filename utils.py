@@ -11,6 +11,7 @@ import random
 import datetime
 
 TOKENS_PROTEIN = "*ACDEFGHIKLMNPQRSTVWY"
+TOKENS_DNA = "ACGT"
 
 # copied from adabmDCA
 @torch.no_grad
@@ -108,7 +109,7 @@ def sequences_from_file(experiment_id: str, round_id: str,
                         device=torch.device("cpu")): 
     dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()
     filepath = dirpath / (experiment_id + round_id + "_merged.fastq_result.fas.gz")
-    tokens = "ACGT"
+    tokens = TOKENS_DNA
     sequences = import_from_fasta(filepath, tokens=tokens)
     seq = torch.tensor(sequences, device=device, dtype=torch.int32)
     
