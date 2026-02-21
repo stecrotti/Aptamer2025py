@@ -9,6 +9,7 @@ import utils
 import pathlib
 import glob
 import os
+import matplotlib.pyplot as plt
 
 def init_chains(
     n_rounds: int,
@@ -17,6 +18,7 @@ def init_chains(
     q: int,
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
+    fi = None
 ) -> torch.Tensor:
 
     if dtype is None:
@@ -24,8 +26,14 @@ def init_chains(
     if device is None:
         device = torch.device('cpu')
 
-    chains = [torch.randint(low=0, high=q, size=(n_chains, L), device=device)
-            for _ in range(n_rounds)]
+    if fi is None:
+        chains = [torch.randint(low=0, high=q, size=(n_chains, L), device=device)
+                for _ in range(n_rounds)]
+    else:
+        assert len(fi) == n_rounds
+        chains = [torch.multinomial(fi[t], num_samples=n_chains, replacement=True).T
+              for t in range(n_rounds)]
+    
     chains_tensor = torch.stack([one_hot(c, num_classes=q).to(dtype=dtype, device=device) for c in chains])
     
     return chains_tensor   # n_rounds, n_chains, L, q
@@ -236,3 +244,44 @@ def estimate_log_likelihood_AIS(model, batches, total_reads, log_multinomial_fac
     beta_schedule = torch.arange(step, 1+step, step).to(dtype=dtype, device=device)
     _, log_weights = sampling.estimate_normalizations(model, chains, n_sweeps, beta_schedule)
     return estimate_log_likelihood(model, batches, total_reads, log_weights, log_multinomial_factors)
+
+def scatter_moments(model, data_loaders, chains, total_reads, log_likelihood_normaliz=1, **kwargs):
+    batches = [next(iter(dl)) for dl in data_loaders]
+    n_rounds = len(batches)
+    cpu = torch.device('cpu')
+    
+    L_data = 0
+    model.zero_grad()
+    for t in range(n_rounds):
+        L_d = - model.compute_energy_up_to_round(batches[t].clone(), t).mean()
+        L_data += total_reads[t] * L_d / log_likelihood_normaliz
+    grad_data = compute_grad_data(model, L_data, retain_graph=False)
+    
+    L_model = 0
+    model.zero_grad()
+    for t in range(n_rounds):
+        L_m = - model.compute_energy_up_to_round(chains[t].clone(), t).mean()
+        L_model += total_reads[t] * L_m / log_likelihood_normaliz
+    grad_model = compute_grad_data(model, L_model, retain_graph=False)
+    
+    n_param = len(list(model.named_parameters()))
+    
+    fig, axes = plt.subplots(1, n_param, **kwargs)
+    for (i, (param_name, _)) in enumerate(model.named_parameters()):
+        ax = axes[i]
+        x = grad_model[i].to(cpu)
+        y = grad_data[i].to(cpu)
+        if param_name.endswith('.J'):
+            x = utils.off_diagonal_terms(x)
+            y = utils.off_diagonal_terms(y)
+        ax.scatter(x, y)
+        ax.plot(x.reshape(-1), x.reshape(-1), label='identity', color='gray', ls='--')
+        ax.legend()
+        ax.set_xlabel('Moments model')
+        ax.set_ylabel('Moments data')
+        ax.set_title(param_name)
+
+    fig.suptitle('Moment matching (units on axes up to const factor)')
+    fig.tight_layout()
+
+    return grad_model, grad_data, fig, axes
