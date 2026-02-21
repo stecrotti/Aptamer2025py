@@ -52,7 +52,7 @@ class ConvergenceMetricsCallback(Callback):
                 dynamic_ncols=True,
                 leave=False,
                 ascii="-#",
-                bar_format="{desc} {percentage:.2f}%[{bar}] Epoch: {n}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]"
+                bar_format="{desc} {percentage:.2f}%[{bar}] Epoch: {n}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
             )
             self.pbar = pbar
         self.param_names = [name for (name, param) in model.named_parameters()]
@@ -432,20 +432,22 @@ class ConstEnergyCallback(Callback):
 def save_checkpoint(checkpoint_filename, epochs, **kwargs):
     fn = checkpoint_filename + '_' + str(epochs) + '.pt'
     dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}' 
-    pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
     torch.save(kwargs, dirpath / fn)
     
 class CheckpointCallback(Callback):
-    def __init__(self, save_every = torch.inf, filename = 'model', delete_old_checkpoints = True):
+    def __init__(self, save_every = torch.inf, checkpoint_filename = 'model', delete_old_checkpoints = True):
         super().__init__()
         self.save_every = save_every
-        self.checkpoint_filename = filename
+        self.checkpoint_filename = checkpoint_filename
         self.total_epochs = 0
 
         if delete_old_checkpoints:
-            dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{filename}' 
+            dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}' 
             if dirpath.is_dir():
                 shutil.rmtree(dirpath, ignore_errors=True)
+
+        dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}' 
+        pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
 
     def before_training(self, *args, **kwargs):
         super().before_training(*args, **kwargs)
