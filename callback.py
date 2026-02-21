@@ -35,6 +35,8 @@ class ConvergenceMetricsCallback(Callback):
         self.pearson_detail = []
         self.slope_detail = []
         self.grad_norm = []
+        self.grad_max = []
+        self.grad_median = []
         self.log_likelihood = []
         self.log_likelihood_valid = []
         self.grad_norm_params = []
@@ -89,10 +91,13 @@ class ConvergenceMetricsCallback(Callback):
         slope = compute_slope(x, y)
         grad_vec = torch.nn.utils.parameters_to_vector(grad_total)
         grad_norm = (torch.sqrt(torch.square(grad_vec).sum()) / len(grad_vec)).item()
+        abs_grad_vec = torch.abs(grad_vec)
         self.pearson.append(pearson)
         self.slope.append(slope)
         self.grad_norm.append(grad_norm)
         self.log_likelihood.append(log_likelihood)
+        self.grad_max.append(torch.max(abs_grad_vec).item())
+        self.grad_median.append(torch.median(abs_grad_vec).item())
         if log_likelihood_valid:
             self.log_likelihood_valid.append(log_likelihood_valid)
 
@@ -141,7 +146,7 @@ class ConvergenceMetricsCallback(Callback):
 
         return c1 and c2
     
-    def plot(self, figsize=(10,3)):
+    def plot(self, figsize=(12,3)):
         fig, axes = plt.subplots(1, 4, figsize=figsize)
 
         ax = axes[0]
@@ -157,10 +162,13 @@ class ConvergenceMetricsCallback(Callback):
         ax.set_ylabel('|1-slope|')
 
         ax = axes[2]
-        ax.plot(self.grad_norm)
+        ax.plot(self.grad_norm, label='norm')
+        ax.plot(self.grad_max, label='max abs')
+        ax.plot(self.grad_median, label='median abs')
         ax.set_yscale('log')
         ax.set_xlabel('iter')
-        ax.set_ylabel('|| grad logL ||')
+        ax.set_title('grad logL')
+        ax.legend()
 
         ax = axes[3]
         ax.plot([-ll for ll in self.log_likelihood], label='training')

@@ -69,14 +69,15 @@ def compute_gradient_and_loglikelihood(
     fi: torch.Tensor,
     pi: torch.Tensor,
     total_reads: torch.Tensor,
-    ts: torch.Tensor
+    ts: torch.Tensor,
+    log_multinomial_factors: torch.Tensor = torch.zeros_like(ts),
 ) -> Tuple[Dict[str, torch.Tensor], float]:
     
     di = fi - pi    
     
     grad = {}
-    W = total_reads.sum()
-    ll = (total_reads[:,None,None] * fi * pi.log()).sum() / W
+    W = (log_multinomial_factors + total_reads).sum()
+    ll = (log_multinomial_factors[:,None,None] + total_reads[:,None,None] * fi * pi.log()).sum() / W
     grad["bias_Ns0"] = (total_reads[:,None,None] * di).sum(dim=0) / W
     grad["bias_ps"] = ((ts * total_reads)[:,None,None] * di).sum(dim=0) / W
     
