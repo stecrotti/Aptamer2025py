@@ -92,11 +92,12 @@ class ConvergenceMetricsCallback(Callback):
         grad_vec = torch.nn.utils.parameters_to_vector(grad_total)
         grad_norm = (torch.sqrt(torch.square(grad_vec).sum()) / len(grad_vec)).item()
         abs_grad_vec = torch.abs(grad_vec)
+        grad_max = torch.max(abs_grad_vec).item()
         self.pearson.append(pearson)
         self.slope.append(slope)
         self.grad_norm.append(grad_norm)
         self.log_likelihood.append(log_likelihood)
-        self.grad_max.append(torch.max(abs_grad_vec).item())
+        self.grad_max.append(grad_max)
         self.grad_median.append(torch.median(abs_grad_vec).item())
         if log_likelihood_valid:
             self.log_likelihood_valid.append(log_likelihood_valid)
@@ -128,7 +129,7 @@ class ConvergenceMetricsCallback(Callback):
 
         if self.progress_bar:
             self.pbar.n = epochs
-            desc = f"Epoch {epochs}, Pearson = {pearson:.5f}, Grad norm = {grad_norm:.4e}, NLL = {-log_likelihood:.4f}"
+            desc = f"Epoch {epochs}, Pearson = {pearson:.5f}, Max abs grad = {grad_max:.4e}, NLL = {-log_likelihood:.4f}"
             if log_likelihood_valid:
                 desc += f", NLL valid = {-log_likelihood_valid:.4f}"
             self.pbar.set_description(desc)
