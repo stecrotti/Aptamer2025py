@@ -39,7 +39,7 @@ class ConvergenceMetricsCallback(Callback):
         self.grad_median = []
         self.log_likelihood = []
         self.log_likelihood_valid = []
-        self.grad_norm_params = []
+        self.grad_max_params = []
         self.grad_param_ratio = []
         self.param_names = None
         self.progress_bar = progress_bar
@@ -118,14 +118,21 @@ class ConvergenceMetricsCallback(Callback):
 
         g = []
         r = []
-        for (grad, param) in zip(grad_total, model.parameters()):
-            ratio = grad.detach().clone().cpu() / param.detach().clone().cpu()
-            norm_ratio = torch.linalg.norm(ratio) / ratio.numel()
-            r.append(norm_ratio)
-            norm = torch.linalg.norm(grad) / grad.numel()
-            g.append(norm)
+        for ((name, param), grad) in zip(model.named_parameters(), grad_total):
+            param = param.detach().clone().cpu()
+            grad = grad.detach().clone().cpu()
+            if name.endswith('J'):
+                param = utils.off_diagonal_terms(param)
+                grad = utils.off_diagonal_terms(grad)
+            grad_abs = torch.abs(grad)
+            param_abs = torch.abs(param)
+            ratio = grad_abs / (param_abs + 1e-8)
+            ratio_abs = torch.max(ratio).item()
+            r.append(ratio_abs)
+            max = torch.max(grad_abs).item()
+            g.append(max)
         self.grad_param_ratio.append(r)
-        self.grad_norm_params.append(g)
+        self.grad_max_params.append(g)
 
         if self.progress_bar:
             self.pbar.n = epochs
@@ -183,7 +190,7 @@ class ConvergenceMetricsCallback(Callback):
         
         return fig, axes
     
-    def plot_pearson_detail(self, figsize=(10, 4)):
+    def plot_pearson_detail(self, figsize=(10, 3)):
         fig, axes = plt.subplots(1, 2, figsize=figsize)
 
         for (name, pearson, slope) in zip(self.param_names, zip(*self.pearson_detail), zip(*self.slope_detail)):
@@ -210,23 +217,23 @@ class ConvergenceMetricsCallback(Callback):
         for (name, norm) in zip(names, zip(*self.grad_param_ratio)):
             ax.plot(norm, label=name)
         ax.legend()
-        ax.set_ylabel('||grad p / p|| / numel(p)')
+        ax.set_ylabel('$\\max |\\nabla p / p|$')
         ax.set_xlabel('iter')
-        ax.set_title('Norm of gradient divided by parameter value (average per parameter)')
+        ax.set_title('Max abs gradient divided by parameter value')
         fig.tight_layout()
         ax.set_yscale('log')
         return fig, ax
     
-    def plot_parameter_norm(self, figsize=(10,3)):
+    def plot_grad_detail(self, figsize=(10,3)):
         fig, ax = plt.subplots(figsize=figsize)
         names = self.param_names
 
-        for (name, norm) in zip(names, zip(*self.grad_norm_params)):
-            ax.plot(norm, label=name)
+        for (name, mx) in zip(names, zip(*self.grad_max_params)):
+            ax.plot(mx, label=name)
         ax.legend()
-        ax.set_ylabel('||grad p|| / numel(p)')
+        ax.set_ylabel('$\\max |\\nabla p|$')
         ax.set_xlabel('iter')
-        ax.set_title('Norm of gradient (average per parameter)')
+        ax.set_title('Max abs gradient')
         fig.tight_layout()
         ax.set_yscale('log')
         return fig, ax
