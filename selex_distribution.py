@@ -1,12 +1,8 @@
 import torch
-from torch.nn import Module
 from tree import Tree
 import sampling
-
-
-class EnergyModel(Module):
-    def __init__(self):
-        super().__init__()
+import energy_models
+import utils
     
 class MultiModeDistribution(torch.nn.Module):
     def __init__(
@@ -16,7 +12,7 @@ class MultiModeDistribution(torch.nn.Module):
     ):
         super().__init__()
         for mode in modes:
-            assert isinstance(mode, EnergyModel), f"Expected mode of type `EnergyModel`, got {type(mode)}"
+            assert isinstance(mode, energy_models.EnergyModel), f"Expected mode of type `EnergyModel`, got {type(mode)}"
         self.modes = torch.nn.ModuleList(modes)
         self.normalized = normalized
 
@@ -45,7 +41,7 @@ class MultiModeDistribution(torch.nn.Module):
 class MultiRoundDistribution(torch.nn.Module):
     def __init__(
         self,
-        round_zero: EnergyModel,
+        round_zero: energy_models.EnergyModel,
         selection: MultiModeDistribution = MultiModeDistribution(),
         tree: Tree = Tree(),
         selected_modes: torch.BoolTensor = torch.empty(0, 0, dtype=bool),   # (n_rounds * n_modes) modes selected for at each round
@@ -127,3 +123,11 @@ class MultiRoundDistribution(torch.nn.Module):
                 energies[t] = energy_t
         
         return energies
+    
+    def estimate_marginals(self, chains, n_sweeps, beta=1.0):
+        self.sample(chains, n_sweeps, beta=beta)
+        fi_tuple, fij_tuple, _ = zip(*[utils.frequences_from_sequences_oh(s) for s in chains])
+        fi = torch.stack(fi_tuple)
+        fij = torch.stack(fij_tuple)
+
+        return fi, fij

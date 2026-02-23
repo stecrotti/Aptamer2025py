@@ -1,7 +1,11 @@
 import torch
-from selex_distribution import EnergyModel
+# from selex_distribution import EnergyModel
 import utils
 import numbers
+
+class EnergyModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
 
 class IndepSites(EnergyModel):
     def __init__(
@@ -46,12 +50,16 @@ class IndepSites(EnergyModel):
         p = p / p.sum(1, keepdim=True)
         return (- self.h * p).sum()
 
-    def lognormalization(self):
+    def log_normalization(self):
         return torch.logsumexp(self.h, dim=1).sum().item()
     
     def normalize(self):
-        logZ = self.lognormalization().detach()
+        logZ = self.log_normalization().detach()
         self.h = torch.nn.Parameter(self.h - logZ)
+
+    def log_prob(self, x):
+        logZ = self.log_normalization()
+        return - self.compute_energy(x) - logZ
 
 class Potts(EnergyModel):
     def __init__(
