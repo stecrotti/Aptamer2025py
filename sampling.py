@@ -210,15 +210,30 @@ def simulated_annealing(chains, compute_energy, n_steps, beta_schedule, callback
 @torch.no_grad
 def annealed_importance_sampling(chains, compute_energy, 
                                  n_sweeps = 1,
-                                 beta_schedule = torch.arange(0.01, 1+0.01, 0.01)):
+                                 beta_schedule = torch.arange(0.01, 1+0.01, 0.01),
+                                 progress_bar = True,
+                                 pbar_desc = 'Running AIS'):
     
     log_weights = torch.zeros(len(chains), dtype=chains.dtype, device=chains.device)
     beta_prev = 0.0
+
+    if progress_bar:
+        pbar = tqdm(
+            total=len(beta_schedule),
+            colour="red",
+            dynamic_ncols=True,
+            leave=False,
+            ascii="-#",
+        )
+        pbar.set_description(pbar_desc)
     
     for beta in beta_schedule:
+        if progress_bar: pbar.update(1)
         chains, energy = _sample_metropolis(chains, compute_energy, n_sweeps, beta=beta)
         log_weights += (beta_prev - beta) * energy 
         beta_prev = beta
+
+    if progress_bar: pbar.close()
 
     return log_weights, chains
 
@@ -229,7 +244,8 @@ def estimate_normalizations(model, chains, n_sweeps, beta_schedule):
     log_weights_all = []
     for t in range(n_rounds):
         compute_energy = lambda x: model.compute_energy_up_to_round(x, t)
-        log_weights, _ = annealed_importance_sampling(chains[t], compute_energy, n_sweeps, beta_schedule)
+        log_weights, _ = annealed_importance_sampling(chains[t], compute_energy, n_sweeps, beta_schedule,
+                                                      pbar_desc = f'Running AIS round {t}')
         log_weights_all.append(log_weights)
         logZt[t] = log_weights.logsumexp(0).item() - torch.log(torch.tensor([log_weights.size(0)])).item() + L*torch.log(torch.tensor([q])).item()
 
