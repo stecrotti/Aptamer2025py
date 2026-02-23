@@ -163,9 +163,9 @@ class ConvergenceMetricsCallback(Callback):
         ax.set_ylabel('|1-slope|')
 
         ax = axes[2]
-        # ax.plot(self.grad_norm, label='norm')
-        ax.plot(self.grad_max, label='$\max |\\nabla logL|$')
-        # ax.plot(self.grad_median, label='median abs')
+        ax.plot(self.grad_norm, label='mean ' + '$|\\nabla logL|$')
+        ax.plot(self.grad_max, label='max ' + '$|\\nabla logL|$')
+        ax.plot(self.grad_median, label='median ' + '$|\\nabla logL|$')
         ax.set_yscale('log')
         ax.set_xlabel('iter')
         # ax.set_title('grad logL')
