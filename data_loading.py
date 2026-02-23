@@ -130,30 +130,12 @@ def train_test_split_plot(counts_round, lims_high, lims_low, n_high, n_low):
 
     return idx_train, idx_valid
 
+
 def split_train_test(sequences_unique_all, counts_unique, idx_train, idx_valid, 
                      device=torch.device('cpu')):
-    n_rounds = len(counts_unique)
-    sequences_train = []
-    sequences_valid = []
-    log_multinomial_factors_train = []
-    log_multinomial_factors_valid = []
-    total_reads_train = []
-    total_reads_valid = []
-    
-    for t in range(n_rounds):
-        sequences_train.append(torch.repeat_interleave(sequences_unique_all[idx_train], counts_unique[t][idx_train], dim=0))
-        sequences_valid.append(torch.repeat_interleave(sequences_unique_all[idx_valid], counts_unique[t][idx_valid], dim=0))
-        log_multinomial_factors_train.append(utils.log_multinomial(counts_unique[t][idx_train]))
-        log_multinomial_factors_valid.append(utils.log_multinomial(counts_unique[t][idx_valid]))
-        total_reads_train.append(counts_unique[t][idx_train].sum().item())
-        total_reads_valid.append(counts_unique[t][idx_valid].sum().item())
-    
-    log_multinomial_factors_train = torch.tensor(log_multinomial_factors_train).to(device)
-    log_multinomial_factors_valid = torch.tensor(log_multinomial_factors_valid).to(device)
-    total_reads_train = torch.tensor(total_reads_train).to(device)
-    total_reads_valid = torch.tensor(total_reads_valid).to(device)
-    
-    sequences_train_oh = [utils.one_hot(s) for s in sequences_train]
-    sequences_valid_oh = [utils.one_hot(s) for s in sequences_valid]
+    sequences_train_oh, total_reads_train, log_multinomial_factors_train = \
+        utils.subsample_sequences(sequences_unique_all, counts_unique, idx_train, device=device)
+    sequences_valid_oh, total_reads_valid, log_multinomial_factors_valid = \
+        utils.subsample_sequences(sequences_unique_all, counts_unique, idx_valid, device=device)
 
     return (sequences_train_oh, total_reads_train, log_multinomial_factors_train), (sequences_valid_oh, total_reads_valid, log_multinomial_factors_valid)

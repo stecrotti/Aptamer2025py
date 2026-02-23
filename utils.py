@@ -676,3 +676,22 @@ def best_device(verbose=True):
     if verbose:
         print(f'Selected device: {device}')
     return device
+
+def subsample_sequences(sequences_unique_all, counts_unique, idx, 
+                        device=torch.device('cpu')):
+    n_rounds = len(counts_unique)
+    sequences = []
+    log_multinomial_factors = []
+    total_reads = []
+    q = sequences_unique_all.max().item() + 1
+    
+    for t in range(n_rounds):
+        sequences.append(torch.repeat_interleave(sequences_unique_all[idx], counts_unique[t][idx], dim=0))
+        log_multinomial_factors.append(log_multinomial(counts_unique[t][idx]))
+        total_reads.append(counts_unique[t][idx].sum().item())
+    
+    log_multinomial_factors = torch.tensor(log_multinomial_factors).to(device)
+    total_reads = torch.tensor(total_reads).to(device)
+    sequences_oh = [one_hot(s, num_classes=q) for s in sequences]
+
+    return sequences_oh, total_reads, log_multinomial_factors
