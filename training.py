@@ -234,8 +234,7 @@ def estimate_log_likelihood(model, batches, total_reads, log_weights, log_multin
     return log_likelihood / log_likelihood_normaliz
 
 @torch.no_grad
-def estimate_log_likelihood_AIS(model, batches, total_reads, log_multinomial_factors, 
-                                n_chains, n_sweeps, step):
+def compute_weights_AIS(model, batches, n_chains, n_sweeps, step):
     x = batches[0][0]
     L, q = x.size()
     dtype = x.dtype
@@ -243,6 +242,14 @@ def estimate_log_likelihood_AIS(model, batches, total_reads, log_multinomial_fac
     chains = init_chains(len(batches), n_chains, L, q, dtype=dtype, device=device)
     beta_schedule = torch.arange(step, 1+step, step).to(dtype=dtype, device=device)
     _, log_weights = sampling.estimate_normalizations(model, chains, n_sweeps, beta_schedule)
+
+    return log_weights
+
+
+@torch.no_grad
+def estimate_log_likelihood_AIS(model, batches, total_reads, log_multinomial_factors, 
+                                n_chains, n_sweeps, step):
+    log_weights = compute_weights_AIS(model, batches, n_chains, n_sweeps, step)
     return estimate_log_likelihood(model, batches, total_reads, log_weights, log_multinomial_factors)
 
 def scatter_moments(model, data_loaders, chains, total_reads, log_likelihood_normaliz=1, **kwargs):
