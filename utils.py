@@ -260,7 +260,7 @@ def sequences_from_file_ab6(round_id: str,
 @torch.jit.script
 def get_count_single_point(
     data: torch.Tensor,
-    pseudo_count: float,
+    pseudo_count: float = 0.0
     ) -> torch.Tensor: 
     
     total_count, L, q = data.shape
@@ -270,7 +270,7 @@ def get_count_single_point(
 
 def get_freq_single_point(
     data: torch.Tensor,
-    pseudo_count: float
+    pseudo_count: float = 0.0
     ) -> torch.Tensor: 
 
     Ri = get_count_single_point(data, pseudo_count)
@@ -279,7 +279,7 @@ def get_freq_single_point(
 @torch.jit.script
 def get_count_two_points(
     data: torch.Tensor,
-    pseudo_count: float,
+    pseudo_count: float = 0.0
     ) -> torch.Tensor:
     
     device = data.device
@@ -304,7 +304,7 @@ def get_count_two_points(
 
 def get_freq_two_points(
     data: torch.Tensor,
-    pseudo_count: float,
+    pseudo_count: float = 0.0
     ) -> torch.Tensor: 
 
     Rij = get_count_two_points(data, pseudo_count)
