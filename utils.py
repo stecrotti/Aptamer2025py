@@ -12,6 +12,7 @@ import datetime
 
 TOKENS_PROTEIN = "*ACDEFGHIKLMNPQRSTVWY"
 TOKENS_DNA = "ACGT"
+TOKENS_RNA = 'ACGU'
 
 # copied from adabmDCA
 @torch.no_grad
