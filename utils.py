@@ -223,8 +223,7 @@ def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):
     return seq
 
 def sequences_uniques_counts_from_file_ab6(round_id: str, 
-                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve(),
-                            device: torch.device = torch.device('cpu')):
+                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve()):
     files = glob.glob(f"*_{round_id}_aa.txt", root_dir=dirpath)
     nf = len(files)
     if nf != 1:
@@ -245,17 +244,28 @@ def sequences_uniques_counts_from_file_ab6(round_id: str,
 
     return sequences, counts
 
-def sequences_from_file_ab6(round_id: str, 
+def sequences_from_file_ab6(round_id: str, dtype=torch.int32,
                             dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve(),
-                            device: torch.device = torch.device('cpu')):
-    sequences, counts = sequences_uniques_counts_from_file_ab6(round_id, dirpath, device)
+                            return_log_multinomial_factors=False):
+    sequences_unique, counts = sequences_uniques_counts_from_file_ab6(round_id, dirpath)
+    sequences_unique = torch.tensor(sequences_unique, dtype=dtype)
+    counts = torch.tensor(counts, dtype=dtype)
+    sequences = torch.repeat_interleave(sequences_unique, counts, dim=0)
 
-    seq = torch.repeat_interleave(
-        torch.tensor(sequences, device=device, dtype=torch.int32), 
-        torch.tensor(counts, device=device, dtype=torch.int32), 
-        dim=0)
-
-    return seq
+    if return_log_multinomial_factors:
+        log_multinomial_factors = log_multinomial(counts)
+        return sequences, log_multinomial_factors
+    else:
+        return sequences
+    
+def sequences_from_files_ab6(round_ids, dtype=torch.int32,
+                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve(),
+                            return_log_multinomial_factors=False):
+    
+    s, l = zip(*[sequences_from_file_ab6(round_id, dtype=dtype, dirpath=dirpath,
+                                         return_log_multinomial_factors=return_log_multinomial_factors)
+                for round_id in round_ids])
+    return s, torch.tensor(l)
     
 
 @torch.jit.script
