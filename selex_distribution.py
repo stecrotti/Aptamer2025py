@@ -131,3 +131,15 @@ class MultiRoundDistribution(torch.nn.Module):
         fij = torch.stack(fij_tuple)
 
         return fi, fij
+    
+def is_simple_indep_sites(model: MultiRoundDistribution):
+    if not isinstance(model.round_zero, energy_models.IndepSites):
+        return False
+    modes = model.selection.modes
+    if len(modes) > 1:
+        return False
+    for mode in modes:
+        if not isinstance(mode, energy_models.IndepSites):
+            return False
+            
+    return True

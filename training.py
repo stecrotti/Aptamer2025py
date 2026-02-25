@@ -9,6 +9,7 @@ import pathlib
 import glob
 import os
 import matplotlib.pyplot as plt
+import indep_sites
 
 def init_chains(
     n_rounds: int,
@@ -128,7 +129,6 @@ def train(
 
     # log_n_chains = torch.log(torch.tensor(n_chains, device=device, dtype=dtype)).item()
     energies_AIS = [torch.zeros_like(chains[t]) for t in ts]
-    Llogq = L * torch.log(torch.tensor(q, device=device, dtype=dtype)).item()
 
     if optimizer is None:
         optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=l2reg)
@@ -161,10 +161,6 @@ def train(
                 data_batch = batches[t]
                 L_d = compute_moments_at_round(model, data_batch, t)
                 L_data += total_reads[t] * L_d / log_likelihood_normaliz
-                # logZt = Llogq + (torch.logsumexp(log_weights[t], dim=0)).item() - log_n_chains
-                # Lt = L_d.detach().clone() - logZt
-                # log_likelihood += (log_multinomial_factors[t] + total_reads[t] * Lt).item()
-            # log_likelihood /= log_likelihood_normaliz
 
             # Compute gradient
             grad_model = compute_grad_model(model, L_model, retain_graph=True)
@@ -290,3 +286,33 @@ def scatter_moments(model, data_loaders, chains, total_reads, log_likelihood_nor
     fig.tight_layout()
 
     return grad_model, grad_data, fig, axes
+
+@torch.no_grad
+def init_from_indep_sites(data_loaders, total_reads=None, fi=None):
+    if fi is None or total_reads is None:
+        fi_list = [utils.get_freq_single_point(dl.seq_oh) for dl in data_loaders]
+        fi = torch.tensor(fi_list)
+        total_reads = torch.tensor([dl.seq_oh.size(0)] for dl in data_loaders)
+    
+    max_epochs = 10**4
+    
+    params=indep_sites.init_parameters(fi)
+    history=indep_sites.init_history()
+
+    lrs = torch.logspace(-2, -15, 5)
+
+    for lr in lrs:
+        params, history = indep_sites.train(
+            fi=fi,
+            total_reads=total_reads, 
+            params=params,
+            lr=lr,
+            max_epochs=max_epochs,
+            target_error=1e-16,
+            history=history,
+            progress_bar=False)
+
+    k = params['bias_Ns0']
+    h = params['bias_ps']
+
+    return k, h
