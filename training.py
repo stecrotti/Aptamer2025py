@@ -3,7 +3,6 @@ from utils import one_hot
 import selex_distribution
 from callback import ConvergenceMetricsCallback
 import sampling
-import copy
 import math
 import utils
 import pathlib
@@ -136,7 +135,7 @@ def train(
 
     log_likelihood = torch.nan
     if log_weights is None:
-        log_weights = torch.full((n_rounds, n_chains), Llogq, device=device, dtype=dtype)
+        log_weights = torch.zeros(n_rounds, n_chains, dtype=dtype, device=device)
 
     epochs = 0   
     converged = (epochs > max_epochs)
@@ -255,7 +254,6 @@ def estimate_log_likelihood_AIS(model, batches, total_reads, log_multinomial_fac
 def scatter_moments(model, data_loaders, chains, total_reads, log_likelihood_normaliz=1, **kwargs):
     batches = [next(iter(dl)) for dl in data_loaders]
     n_rounds = len(batches)
-    cpu = torch.device('cpu')
     
     L_data = 0
     model.zero_grad()
@@ -276,8 +274,8 @@ def scatter_moments(model, data_loaders, chains, total_reads, log_likelihood_nor
     fig, axes = plt.subplots(1, n_param, **kwargs)
     for (i, (param_name, _)) in enumerate(model.named_parameters()):
         ax = axes[i]
-        x = grad_model[i].to(cpu)
-        y = grad_data[i].to(cpu)
+        x = grad_model[i].cpu()
+        y = grad_data[i].cpu()
         if param_name.endswith('.J'):
             x = utils.off_diagonal_terms(x)
             y = utils.off_diagonal_terms(y)

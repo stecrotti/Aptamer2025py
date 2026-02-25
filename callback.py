@@ -89,7 +89,7 @@ class ConvergenceMetricsCallback(Callback):
         y = torch.nn.utils.parameters_to_vector(grad_data)
         pearson = compute_pearson(x, y)
         slope = compute_slope(x, y)
-        grad_vec = torch.nn.utils.parameters_to_vector(grad_total)
+        grad_vec = torch.nn.utils.parameters_to_vector(grad_total).cpu()
         grad_norm = (torch.sqrt(torch.square(grad_vec).sum()) / len(grad_vec)).item()
         abs_grad_vec = torch.abs(grad_vec)
         grad_max = torch.max(abs_grad_vec).item()
@@ -254,7 +254,7 @@ class PearsonCovarianceCallback(Callback):
         self.pearson_Ns0 = []
         self.pearson_ps = []
 
-    def after_step(self, model, grad_model, grad_data, data_loaders, *args, **kwargs):
+    def after_step(self, model, grad_model, grad_data, *args, **kwargs):
         offset = 0
         if isinstance(model.round_zero, energy_models.Potts):
             pearson_Ns0 = compute_potts_covariance(

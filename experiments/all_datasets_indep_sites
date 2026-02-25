@@ -1,0 +1,7 @@
+#!/bin/bash
+
+declare -a ns=(0 1 2)
+
+for n in ${!ns[@]}; do
+    pixi run python all_datasets_indep_sites.py ${n} &
+done
