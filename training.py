@@ -125,7 +125,7 @@ def train(
     if log_multinomial_factors is None:
         log_multinomial_factors = torch.zeros(n_rounds)
 
-    log_likelihood_normaliz = (total_reads + log_multinomial_factors).sum().item()
+    log_likelihood_normaliz = total_reads.sum().item()
 
     # log_n_chains = torch.log(torch.tensor(n_chains, device=device, dtype=dtype)).item()
     energies_AIS = [torch.zeros_like(chains[t]) for t in ts]
@@ -288,11 +288,11 @@ def scatter_moments(model, data_loaders, chains, total_reads, log_likelihood_nor
     return grad_model, grad_data, fig, axes
 
 @torch.no_grad
-def init_from_indep_sites(data_loaders, total_reads=None, fi=None):
+def init_from_indep_sites(sequences_oh, total_reads=None, fi=None):
     if fi is None or total_reads is None:
-        fi_list = [utils.get_freq_single_point(dl.seq_oh) for dl in data_loaders]
-        fi = torch.tensor(fi_list)
-        total_reads = torch.tensor([dl.seq_oh.size(0)] for dl in data_loaders)
+        fi_list = [utils.get_freq_single_point(seq_oh) for seq_oh in sequences_oh]
+        fi = torch.stack(fi_list)
+        total_reads = torch.tensor([seq_oh.size(0) for seq_oh in sequences_oh])
     
     max_epochs = 10**4
     

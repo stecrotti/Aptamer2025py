@@ -136,7 +136,7 @@ class ConvergenceMetricsCallback(Callback):
 
         if self.progress_bar:
             self.pbar.n = epochs
-            desc = f"Epoch {epochs}, Pearson = {pearson:.5f}, Max abs grad = {grad_max:.4e}, NLL = {-log_likelihood:.4f}"
+            desc = f"Pearson = {pearson:.5f}, Max abs grad = {grad_max:.4e}, NLL = {-log_likelihood:.4f}"
             if log_likelihood_valid:
                 desc += f", NLL valid = {-log_likelihood_valid:.4f}"
             self.pbar.set_description(desc)
