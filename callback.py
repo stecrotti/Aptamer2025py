@@ -562,21 +562,23 @@ class HammingDistanceCallback(Callback):
         super().__init__()
         if not torch.is_floating_point(sequences_unique_all) or not torch.is_floating_point(wt):
             raise ValueError('Sequences and wt must be one-hot encoded and of floating-point type')
-        self.sequences_unique_all = sequences_unique_all.clone().to(device)
-        self.wt = wt.to(device).clone()
-        self.distances = utils.hamming(wt, sequences_unique_all)
+        self.sequences_unique_all = sequences_unique_all.clone()
+        self.wt = wt.clone()
+        self.distances = utils.hamming(wt, sequences_unique_all).to(torch.int)
         self.distances_unique = torch.unique(self.distances)
         self.std_delta_logps_distances = []
+        self.device = device
 
     def after_step(self, model, **kwargs):
-        logps = - model.selection_energy_at_round(self.sequences_unique_all, 1).detach().cpu()
+        sequences = self.sequences_unique_all.to(self.device)
+        with torch.no_grad():
+            logps = - model.selection_energy_at_round(sequences, 1).cpu()
+        del sequences
         delta = torch.zeros_like(self.distances_unique, dtype=logps.dtype)
         for d in self.distances_unique:
             idx = self.distances == d
             logps_avg = logps[idx].mean()
             delta[d] = (logps[idx] - logps_avg).std()
-        delta = delta.cpu()
-        self.delta.append(delta)
         self.std_delta_logps_distances.append(delta.std().item())
 
         return False
