@@ -148,23 +148,25 @@ def train(
             optimizer.zero_grad()
             L_model = L_data = 0
             log_likelihood = 0.0
+
+            # update chains
             for t in ts:
-                # update chains and log weights for estimate of normalization
                 with torch.no_grad():
                     energies_AIS[t] = update_chains(chains, t, model, n_sweeps)
 
-                # compute gradient
+            # compute model moments
+            for t in ts:
                 L_m = compute_moments_at_round(model, chains[t].clone(), t)
                 L_model += total_reads[t] * L_m / log_likelihood_normaliz
-                
-                # extract batch of data from round t
+            grad_model = compute_grad_model(model, L_model, retain_graph=True)
+
+            # comute data moments
+            for t in ts:
                 data_batch = batches[t]
                 L_d = compute_moments_at_round(model, data_batch, t)
                 L_data += total_reads[t] * L_d / log_likelihood_normaliz
-
-            # Compute gradient
-            grad_model = compute_grad_model(model, L_model, retain_graph=True)
-            grad_data = compute_grad_data(model, L_data, retain_graph=False)
+            grad_data = compute_grad_data(model, L_data, retain_graph=False)            
+            
             grad_total = compute_total_gradient(model, grad_model, grad_data)
             # do gradient step on params
             optimizer.step()
