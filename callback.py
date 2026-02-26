@@ -576,9 +576,22 @@ class HammingDistanceCallback(Callback):
         del sequences
         delta = torch.zeros_like(self.distances_unique, dtype=logps.dtype)
         for d in self.distances_unique:
-            idx = self.distances == d
-            logps_avg = logps[idx].mean()
-            delta[d] = (logps[idx] - logps_avg).std()
-        self.std_delta_logps_distances.append(delta.std().item())
+            delta[d] = logps[self.distances == d].std()
+        self.std_delta_logps_distances.append(delta)
 
         return False
+    
+    def plot(self, figsize=(4,3), **kwargs):
+        delta = list(zip(*self.std_delta_logps_distances))
+        colors = plt.cm.viridis(torch.arange(0, 1, 1/len(delta)))
+        fig, ax = plt.subplots(figsize=figsize, **kwargs)
+        for (i, d) in enumerate(delta):
+            if i in (0, len(delta)-1):
+                ax.plot(d, color=colors[i], label=f'd={d}')
+            else:
+                ax.plot(d, color=colors[i])
+
+        ax.set_xlabel('Epoch')
+        ax.set_title('Mean square deviation from avg logps at hamming distance $d$')
+        
+        return fig, ax
