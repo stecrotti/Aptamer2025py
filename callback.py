@@ -556,3 +556,26 @@ class ParamsCallback(Callback):
         fig.tight_layout()
 
         return fig, ax
+
+class HammingDistanceCallback(Callback):
+    def __init__(self, sequences_unique_all, wt, device=torch.device('cpu')):
+        super().__init__()
+        if not torch.is_floating_point(sequences_unique_all) or not torch.is_floating_point(wt):
+            raise ValueError('Sequences and wt must be one-hot encoded and of floating-point type')
+        self.sequences_unique_all = sequences_unique_all.clone().to(device)
+        self.wt = wt.to(device).clone()
+        self.distances = utils.hamming(wt, sequences_unique_all)
+        self.distances_unique = torch.unique(self.distances)
+        self.std_delta_logps_distances = []
+
+    def after_step(self, model, **kwargs):
+        logps = - model.selection_energy_at_round(self.sequences_unique_all, 1).detach().cpu()
+        delta = torch.zeros_like(self.distances_unique, dtype=logps.dtype)
+        for d in self.distances_unique:
+            idx = self.distances == d
+            logps_avg = logps[idx].mean()
+            delta[d] = (logps[idx] - logps_avg).std()
+        self.delta.append(delta)
+        self.std_delta_logps_distances.append(delta.std().item())
+
+        return False
