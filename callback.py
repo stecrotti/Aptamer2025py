@@ -575,6 +575,7 @@ class HammingDistanceCallback(Callback):
             idx = self.distances == d
             logps_avg = logps[idx].mean()
             delta[d] = (logps[idx] - logps_avg).std()
+        delta = delta.cpu()
         self.delta.append(delta)
         self.std_delta_logps_distances.append(delta.std().item())
 
