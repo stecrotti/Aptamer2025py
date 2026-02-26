@@ -47,24 +47,34 @@ def compute_moments_at_round(model, x, t):
     # this L is not physically a likelihood, more like a computational trick
     return - model.compute_energy_up_to_round(x, t).mean()
 
-def compute_grad_model(model, L_model, retain_graph):
-    params = tuple(model.parameters())
+def compute_grad_model(model, chains, total_reads, retain_graph):
+    log_likelihood_normaliz = total_reads.sum().item()
+
+    L = 0.0
+    for t in range(len(chains)):
+        Lt = compute_moments_at_round(model, chains[t].clone(), t)
+        L += total_reads[t] * Lt / log_likelihood_normaliz
 
     grad_model = torch.autograd.grad(
-        outputs=L_model,
-        inputs=params,
+        outputs=L,
+        inputs=tuple(model.parameters()),
         retain_graph=retain_graph,
         create_graph=False
     )
 
     return grad_model
 
-def compute_grad_data(model, L_data, retain_graph):
-    params = tuple(model.parameters())
+def compute_grad_data(model, batches, total_reads, retain_graph):
+    log_likelihood_normaliz = total_reads.sum().item()
+
+    L = 0.0
+    for t in range(len(batches)):
+        Lt = compute_moments_at_round(model, batches[t], t)
+        L += total_reads[t] * Lt / log_likelihood_normaliz
 
     grad_data = torch.autograd.grad(
-        outputs=L_data,
-        inputs=params,
+        outputs=L,
+        inputs=tuple(model.parameters()),
         retain_graph=retain_graph,
         create_graph=False
     )
@@ -146,8 +156,6 @@ def train(
     while not converged:
         for batches in zip(*[iter(dl) for dl in data_loaders]):
             optimizer.zero_grad()
-            L_model = L_data = 0
-            log_likelihood = 0.0
 
             # update chains
             for t in ts:
@@ -155,19 +163,13 @@ def train(
                     energies_AIS[t] = update_chains(chains, t, model, n_sweeps)
 
             # compute model moments
-            for t in ts:
-                L_m = compute_moments_at_round(model, chains[t].clone(), t)
-                L_model += total_reads[t] * L_m / log_likelihood_normaliz
-            grad_model = compute_grad_model(model, L_model, retain_graph=True)
+            grad_model = compute_grad_model(model, chains, total_reads, retain_graph=True)
 
             # comute data moments
-            for t in ts:
-                data_batch = batches[t]
-                L_d = compute_moments_at_round(model, data_batch, t)
-                L_data += total_reads[t] * L_d / log_likelihood_normaliz
-            grad_data = compute_grad_data(model, L_data, retain_graph=False)            
+            grad_data = compute_grad_data(model, batches, total_reads, retain_graph=False)            
             
             grad_total = compute_total_gradient(model, grad_model, grad_data)
+
             # do gradient step on params
             optimizer.step()
 
@@ -249,23 +251,14 @@ def estimate_log_likelihood_AIS(model, batches, total_reads, log_multinomial_fac
     log_weights = compute_weights_AIS(model, batches, n_chains, n_sweeps, step)
     return estimate_log_likelihood(model, batches, total_reads, log_weights, log_multinomial_factors)
 
-def scatter_moments(model, data_loaders, chains, total_reads, log_likelihood_normaliz=1, **kwargs):
-    batches = [next(iter(dl)) for dl in data_loaders]
-    n_rounds = len(batches)
-    
-    L_data = 0
+def scatter_moments(model, data_loaders, chains, total_reads, **kwargs):
+    batches = [next(iter(dl)) for dl in data_loaders]    
+
     model.zero_grad()
-    for t in range(n_rounds):
-        L_d = - model.compute_energy_up_to_round(batches[t].clone(), t).mean()
-        L_data += total_reads[t] * L_d / log_likelihood_normaliz
-    grad_data = compute_grad_data(model, L_data, retain_graph=False)
-    
-    L_model = 0
+    grad_model = compute_grad_model(model, chains, total_reads, retain_graph=True)
+
     model.zero_grad()
-    for t in range(n_rounds):
-        L_m = - model.compute_energy_up_to_round(chains[t].clone(), t).mean()
-        L_model += total_reads[t] * L_m / log_likelihood_normaliz
-    grad_model = compute_grad_data(model, L_model, retain_graph=False)
+    grad_data = compute_grad_data(model, batches, total_reads, retain_graph=False)    
     
     n_param = len(list(model.named_parameters()))
     
