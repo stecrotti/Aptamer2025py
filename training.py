@@ -43,43 +43,50 @@ def update_chains_default():
         return sampling.sample_metropolis(model, chains, t, n_sweeps)
     return update_chains
 
-def compute_moments_at_round(model, x, t):
-    # this L is not physically a likelihood, more like a computational trick
-    return - model.compute_energy_up_to_round(x, t).mean()
+# def compute_moments_at_round(model, x, t):
+#     # this L is not physically a likelihood, more like a computational trick
+#     return - model.compute_energy_up_to_round(x, t).mean()
 
-def compute_grad_model(model, chains, total_reads, retain_graph):
-    log_likelihood_normaliz = total_reads.sum().item()
+def loglikelihood_component(model, x, total_reads, log_multinomial_factors=None, logZ=None):
+    normaliz = total_reads.sum()
+    if log_multinomial_factors is None:
+        log_multinomial_factors = torch.zeros(len(x), dtype=x[0].dtype, device=x[0].device)
+    if logZ is None:
+        logZ = torch.zeros(len(x), dtype=x[0].dtype, device=x[0].device)
+    l = 0.0
+    for t in range(len(x)):
+        lt = - model.compute_energy_up_to_round(x[t], t).mean() - logZ[t]
+        l += log_multinomial_factors[t] + total_reads[t] * lt
+        
+    return l / normaliz
 
-    L = 0.0
-    for t in range(len(chains)):
-        Lt = compute_moments_at_round(model, chains[t].clone(), t)
-        L += total_reads[t] * Lt / log_likelihood_normaliz
-
-    grad_model = torch.autograd.grad(
-        outputs=L,
+def grad_loglikelihood_component(model, x, total_reads, 
+                                 log_multinomial_factors = None, 
+                                 retain_graph = False):
+    
+    l = loglikelihood_component(model, x, total_reads, 
+                                log_multinomial_factors=log_multinomial_factors)
+    
+    grad = torch.autograd.grad(
+        outputs=l,
         inputs=tuple(model.parameters()),
         retain_graph=retain_graph,
         create_graph=False
     )
 
-    return grad_model
+    return grad
 
-def compute_grad_data(model, batches, total_reads, retain_graph):
-    log_likelihood_normaliz = total_reads.sum().item()
+# def compute_grad_data(model, batches, total_reads, log_multinomial_factors, retain_graph):
+#     L = compute_likelihood_component(model, batches, total_reads, log_multinomial_factors)
 
-    L = 0.0
-    for t in range(len(batches)):
-        Lt = compute_moments_at_round(model, batches[t], t)
-        L += total_reads[t] * Lt / log_likelihood_normaliz
+#     grad_data = torch.autograd.grad(
+#         outputs=L,
+#         inputs=tuple(model.parameters()),
+#         retain_graph=retain_graph,
+#         create_graph=False
+#     )
 
-    grad_data = torch.autograd.grad(
-        outputs=L,
-        inputs=tuple(model.parameters()),
-        retain_graph=retain_graph,
-        create_graph=False
-    )
-
-    return grad_data
+#     return grad_data
 
 def compute_total_gradient(model, grad_model, grad_data):
     # minus because we want gradient of *negative* loglikelihood
@@ -132,11 +139,6 @@ def train(
     ts = torch.arange(n_rounds, device=device)
     assert chains.shape[0] == n_rounds
 
-    if log_multinomial_factors is None:
-        log_multinomial_factors = torch.zeros(n_rounds)
-
-    log_likelihood_normaliz = total_reads.sum().item()
-
     # log_n_chains = torch.log(torch.tensor(n_chains, device=device, dtype=dtype)).item()
     energies_AIS = [torch.zeros_like(chains[t]) for t in ts]
 
@@ -163,26 +165,31 @@ def train(
                     energies_AIS[t] = update_chains(chains, t, model, n_sweeps)
 
             # compute model moments
-            grad_model = compute_grad_model(model, chains, total_reads, retain_graph=True)
+            # grad_model = compute_grad_model(model, chains, total_reads, retain_graph=True)
+            grad_model = grad_loglikelihood_component(model, chains, total_reads, 
+                                                      log_multinomial_factors=log_multinomial_factors, retain_graph=True)
 
             # comute data moments
-            grad_data = compute_grad_data(model, batches, total_reads, retain_graph=False)            
+            # grad_data = compute_grad_data(model, batches, total_reads, retain_graph=False)    
+            grad_data = grad_loglikelihood_component(model, batches, total_reads, 
+                                                     log_multinomial_factors=log_multinomial_factors, retain_graph=False)         
             
             grad_total = compute_total_gradient(model, grad_model, grad_data)
 
             # do gradient step on params
             optimizer.step()
 
-            if data_loaders_valid is not None:
-                if log_multinomial_factors_valid is None:
-                    raise ValueError("Validation set was provided, but not the corresponding log-multinomial factors.")
-                batches_valid = [next(iter(dl)) for dl in data_loaders_valid]
-                log_likelihood_valid = estimate_log_likelihood(model, batches_valid, total_reads_valid, log_weights,
-                                                               log_multinomial_factors_valid)
-            else:
-                log_likelihood_valid = None
-
             with torch.no_grad():
+
+                if data_loaders_valid is not None:
+                    if log_multinomial_factors_valid is None:
+                        raise ValueError("Validation set was provided, but not the corresponding log-multinomial factors.")
+                    batches_valid = [next(iter(dl)) for dl in data_loaders_valid]
+                    log_likelihood_valid = estimate_log_likelihood(model, batches_valid, total_reads_valid, log_weights,
+                                                                log_multinomial_factors_valid)
+                else:
+                    log_likelihood_valid = None
+
                 # update logweights for importance sampling estimate of normalization constant
                 for t in ts:
                     energy_new = model.compute_energy_up_to_round(chains[t], t)
@@ -198,7 +205,7 @@ def train(
                                 data_loaders=data_loaders, log_likelihood_valid=log_likelihood_valid, 
                                 og_multinomial_factors=log_multinomial_factors,
                                 data_loaders_valid=data_loaders_valid, total_reads_valid=total_reads_valid,
-                                log_likelihood = log_likelihood, epochs=epochs,
+                                log_likelihood=log_likelihood, epochs=epochs,
                                 grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
                                 target_pearson=target_pearson, thresh_slope=thresh_slope,
                                 optimizer=optimizer, log_weights=log_weights,
@@ -211,26 +218,33 @@ def train(
 
     model.zero_grad()
 
-@torch.no_grad
-def estimate_logprobability_up_to_round(model, x: torch.tensor, t, log_weights: torch.tensor):
-    batch_size, L, q = x.size()
-    en = model.compute_energy_up_to_round(x, t).mean().item()
-    Llogq = L * math.log(q)
-    logZt = Llogq - math.log(len(log_weights)) + (torch.logsumexp(log_weights, dim=0)).item()
-    logp = - en - logZt
-    return logp
+# @torch.no_grad
+# def estimate_logprobability_up_to_round(model, x: torch.tensor, t, log_weights: torch.tensor):
+#     batch_size, L, q = x.size()
+#     en = model.compute_energy_up_to_round(x, t).mean().item()
+#     Llogq = L * math.log(q)
+#     logZt = Llogq - math.log(len(log_weights)) + (torch.logsumexp(log_weights, dim=0)).item()
+#     logp = - en - logZt
+#     return logp
 
 @torch.no_grad
-def estimate_log_likelihood(model, batches, total_reads, log_weights, log_multinomial_factors):
-    n_rounds = len(batches)
-    assert len(log_weights) == n_rounds
-    log_likelihood_normaliz = (total_reads + log_multinomial_factors).sum().item()
-    log_likelihood = 0.0
-    for t in range(n_rounds):
-        Lt = estimate_logprobability_up_to_round(model, batches[t], t, log_weights[t])
-        log_likelihood += (log_multinomial_factors[t] + total_reads[t] * Lt).item()
+def estimate_log_likelihood(model, x, total_reads, log_weights, log_multinomial_factors=None):
+    # n_rounds = len(batches)
+    # assert len(log_weights) == n_rounds
+    # log_likelihood_normaliz = (total_reads + log_multinomial_factors).sum().item()
+    # log_likelihood = 0.0
+    # for t in range(n_rounds):
+    #     Lt = estimate_logprobability_up_to_round(model, batches[t], t, log_weights[t])
+    #     log_likelihood += (log_multinomial_factors[t] + total_reads[t] * Lt).item()
 
-    return log_likelihood / log_likelihood_normaliz
+    # return log_likelihood / log_likelihood_normaliz
+    logZ = []
+    for t in range(len(x)):
+        _, L, q = x[t].size()
+        assert (log_weights[t].dim == 1, f"log_weights.size()")
+        logZ.append(L * math.log(q) - math.log(len(log_weights[t])) + (torch.logsumexp(log_weights[t], dim=0)).item())
+
+    return loglikelihood_component(model, x, total_reads, log_multinomial_factors=log_multinomial_factors, logZ = torch.tensor(logZ)).item()
 
 @torch.no_grad
 def compute_weights_AIS(model, batches, n_chains, n_sweeps, step):
@@ -251,14 +265,17 @@ def estimate_log_likelihood_AIS(model, batches, total_reads, log_multinomial_fac
     log_weights = compute_weights_AIS(model, batches, n_chains, n_sweeps, step)
     return estimate_log_likelihood(model, batches, total_reads, log_weights, log_multinomial_factors)
 
-def scatter_moments(model, data_loaders, chains, total_reads, **kwargs):
+def scatter_moments(model, data_loaders, chains, total_reads, 
+                    log_multinomial_factors=None, **kwargs):
     batches = [next(iter(dl)) for dl in data_loaders]    
 
     model.zero_grad()
-    grad_model = compute_grad_model(model, chains, total_reads, retain_graph=True)
+    grad_model = grad_loglikelihood_component(model, chains, total_reads, 
+                                              log_multinomial_factors=log_multinomial_factors, retain_graph=True)
 
     model.zero_grad()
-    grad_data = compute_grad_data(model, batches, total_reads, retain_graph=False)    
+    grad_data = grad_loglikelihood_component(model, batches, total_reads, 
+                                             log_multinomial_factors=log_multinomial_factors, retain_graph=False)    
     
     n_param = len(list(model.named_parameters()))
     
