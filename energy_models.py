@@ -1,11 +1,13 @@
 import torch
-# from selex_distribution import EnergyModel
 import utils
 import numbers
 
 class EnergyModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
+
+    def compute_energy(self, x):
+        return self.forward(x)
 
 class IndepSites(EnergyModel):
     def __init__(
@@ -25,7 +27,7 @@ class IndepSites(EnergyModel):
     def get_sequence_length(self):
         return self.h.size(0)
 
-    def compute_energy(
+    def forward(
         self,
         x: torch.Tensor
     ):
@@ -36,9 +38,6 @@ class IndepSites(EnergyModel):
         bias_flat = self.h.view(L * q)
 
         return - x_flat @ bias_flat
-
-    def forward(self, x):
-        return self.compute_energy(x)
     
     def set_zerosum_gauge(self):
         h = self.h.detach().clone()
@@ -93,7 +92,7 @@ class Potts(EnergyModel):
     def get_sequence_length(self):
         return self.h.size(0)
 
-    def compute_energy(
+    def forward(
         self,
         x: torch.Tensor
     ):
@@ -107,9 +106,6 @@ class Potts(EnergyModel):
         coupling_term = torch.sum(x_flat * (x_flat @ couplings_flat), dim=1)
         return - bias_term - 0.5 * coupling_term
 
-    def forward(self, x):
-        return self.compute_energy(x)
-
     def set_zerosum_gauge(self):
         J, h = utils.set_zerosum_gauge(self.J.detach().clone(), self.h.detach().clone(), self.mask)
         return Potts(J, h)
@@ -120,7 +116,7 @@ class InfiniteEnergy(EnergyModel):
     def __init__(self):
         super().__init__()
 
-    def compute_energy(
+    def forward(
         self,
         x: torch.Tensor
     ):
@@ -141,7 +137,7 @@ class ConstantEnergy(EnergyModel):
         else:
             self.register_buffer('en', en)
             
-    def compute_energy(
+    def forward(
         self,
         x: torch.Tensor
     ):
@@ -162,7 +158,7 @@ class GenericEnergyModel(EnergyModel):
         super().__init__()
         self.model = model
 
-    def compute_energy(
+    def forward(
         self,
         x: torch.Tensor
     ):
@@ -171,5 +167,37 @@ class GenericEnergyModel(EnergyModel):
 
         return self.model(x_flat).squeeze()
 
-    def forward(self, x):
-        return self.compute_energy(x)
+class OverlapEnergy(EnergyModel):
+    def __init__(
+        self,
+        ref: torch.tensor,
+        alpha = 1.0,
+        train_strength: bool = True,
+    ):
+        super().__init__()
+        if ref.dim() == 1 and not torch.is_floating_point(ref):
+            ref = utils.one_hot(ref)
+
+        alpha = torch.tensor(alpha, dtype=ref.dtype)
+
+        self.register_buffer('ref', ref)
+        if train_strength:
+            self.alpha = torch.nn.Parameter(alpha)
+        else:
+            self.register_buffer('alpha', alpha)
+
+    def forward(
+            self,
+            x: torch.Tensor
+    ):
+        overlap = (x * self.ref).sum((-2,-1))
+        energy = - self.alpha * overlap
+        return energy
+    
+    def log_normalization(self):
+        L, q = self.ref.size()
+        return L * torch.log(1 + (q - 1) * torch.exp(self.alpha))
+    
+    def avg_overlap(self):
+        L, q = self.ref.size()
+        return L / (1 + (q - 1) * torch.exp(- self.alpha))
