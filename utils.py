@@ -120,9 +120,9 @@ def sequences_unique_and_counts(sequences):
     n_sequences = len(sequences)
     sequences_unique, counts = torch.unique(sequences, dim=0, return_counts=True)
     assert counts.sum() == n_sequences
-    logmult = log_multinomial(counts)
+    log_multinomial_factors = log_multinomial(counts)
     
-    return sequences_unique, counts, logmult
+    return sequences_unique, counts, log_multinomial_factors
 
 def sequences_counts_from_file(*args, **kwargs):
     sequences = sequences_from_file(*args, **kwargs)
@@ -706,3 +706,10 @@ def subsample_sequences(sequences_unique_all, counts_unique, idx,
     sequences_oh = [one_hot(s, num_classes=q) for s in sequences]
 
     return sequences_oh, total_reads, log_multinomial_factors
+
+def hamming(x: torch.tensor, y: torch.tensor):
+    if torch.is_floating_point(x) and torch.is_floating_point(y):
+        L = x.size(-2)
+        return L - (x * y).sum((-2,-1))
+    else:
+        return (x != y).sum(-1)
