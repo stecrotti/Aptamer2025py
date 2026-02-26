@@ -540,3 +540,19 @@ class ParamsCallback(Callback):
         fig.tight_layout()
 
         return fig, ax
+
+    def plot_norm(self, **kwargs):
+        n_params = len(self.param_names)
+
+        fig, ax = plt.subplots( **kwargs)
+        for i in range(n_params):
+            norm = torch.linalg.norm(self.params[i])
+            ax.plot(self.epochs, norm, label=self.param_names[i])
+            ax.set_xlabel('epoch')
+            ax.set_ylabel('||param||')
+            ax.legend()
+
+        ax.set_title('Norm of parameters')
+        fig.tight_layout()
+
+        return fig, ax
