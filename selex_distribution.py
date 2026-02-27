@@ -150,12 +150,9 @@ class MultiRoundDistribution(torch.nn.Module):
 
         return l / normaliz
 
-    def grad_loglikelihood_component(self, x, total_reads, 
-                                 log_multinomial_factors = None, 
-                                 retain_graph = False):
-    
-        l = self.loglikelihood_component(x, total_reads, 
-                                    log_multinomial_factors=log_multinomial_factors)
+    def grad_loglikelihood_component(self, x, total_reads, retain_graph = False):
+        
+        l = self.loglikelihood_component(x, total_reads)
         
         grad = torch.autograd.grad(
             outputs=l,
@@ -166,12 +163,19 @@ class MultiRoundDistribution(torch.nn.Module):
 
         return grad
     
+    def grad_loglikelihood_model(self, *args, **kwargs):
+        return self.grad_loglikelihood_component(*args, **kwargs)
+    
+    def grad_loglikelihood_data(self, *args, **kwargs):
+        return self.grad_loglikelihood_component(*args, **kwargs)
+    
     @torch.no_grad
-    def estimate_log_likelihood(self, x, total_reads, log_weights, log_multinomial_factors=None):
+    def estimate_log_likelihood(self, x, total_reads, log_weights=None, log_multinomial_factors=None):
+        if log_weights is None:
+            log_weights = torch.zeros(len(x), len(x[0]), dtype=x[0].dtype, device=x[0].device)
         logZ = []
         for t in range(len(x)):
             _, L, q = x[t].size()
-            assert (log_weights[t].dim == 1, f"log_weights.size()")
             logZ.append(L * math.log(q) - math.log(len(log_weights[t])) + (torch.logsumexp(log_weights[t], dim=0)).item())
 
         return self.loglikelihood_component(x, total_reads, log_multinomial_factors=log_multinomial_factors, logZ = torch.tensor(logZ)).item()

@@ -317,7 +317,7 @@ class TeacherStudentCallback(Callback):
         self.pearson_energies = []
         self.slope_energies = []
 
-    def after_step(self, model, data_loaders, grad_total, *args, **kwargs):
+    def after_step(self, model, data_loaders, *args, **kwargs):
         model_teacher = self.model_teacher
         model_student = model
         Ns0_teacher = model_teacher.round_zero

@@ -149,9 +149,9 @@ def train(
                     energies_AIS[t] = update_chains(chains, t, model, n_sweeps)
 
             # compute model moments
-            grad_model = model.grad_loglikelihood_component(chains, total_reads, retain_graph=True)
+            grad_model = model.grad_loglikelihood_model(chains, total_reads, retain_graph=True)
             # compute data moments  
-            grad_data = model.grad_loglikelihood_component(batches, total_reads, retain_graph=False)         
+            grad_data = model.grad_loglikelihood_data(batches, total_reads, retain_graph=False)         
             # compute total gradient
             grad_total = total_nll_gradient(model, grad_model, grad_data)
             # do gradient step on params
@@ -162,7 +162,7 @@ def train(
                     if log_multinomial_factors_valid is None:
                         raise ValueError("Validation set was provided, but not the corresponding log-multinomial factors.")
                     batches_valid = [next(iter(dl)) for dl in data_loaders_valid]
-                    log_likelihood_valid = estimate_log_likelihood(model, batches_valid, total_reads_valid, log_weights,
+                    log_likelihood_valid = model.estimate_log_likelihood(batches_valid, total_reads_valid, log_weights,
                                                                 log_multinomial_factors_valid)
                 else:
                     log_likelihood_valid = None
@@ -171,7 +171,7 @@ def train(
                 for t in ts:
                     energy_new = model.compute_energy_up_to_round(chains[t], t)
                     log_weights[t] += energies_AIS[t] - energy_new
-                log_likelihood = estimate_log_likelihood(model, batches, total_reads, log_weights, log_multinomial_factors)
+                log_likelihood = model.estimate_log_likelihood(batches, total_reads, log_weights, log_multinomial_factors)
 
                 epochs += 1
                 converged = (epochs > max_epochs)
@@ -180,7 +180,7 @@ def train(
                 for callback in callbacks:
                     c = callback.after_step(model=model, chains=chains, total_reads=total_reads, 
                                 data_loaders=data_loaders, log_likelihood_valid=log_likelihood_valid, 
-                                og_multinomial_factors=log_multinomial_factors,
+                                log_multinomial_factors=log_multinomial_factors,
                                 data_loaders_valid=data_loaders_valid, total_reads_valid=total_reads_valid,
                                 log_likelihood=log_likelihood, epochs=epochs,
                                 grad_model=grad_model, grad_data=grad_data, grad_total=grad_total,
@@ -229,12 +229,10 @@ def scatter_moments(model, data_loaders, chains, total_reads,
     batches = [next(iter(dl)) for dl in data_loaders]    
 
     model.zero_grad()
-    grad_model = grad_loglikelihood_component(model, chains, total_reads, 
-                                              log_multinomial_factors=log_multinomial_factors, retain_graph=True)
+    grad_model = grad_loglikelihood_component(model, chains, total_reads, retain_graph=True)
 
     model.zero_grad()
-    grad_data = grad_loglikelihood_component(model, batches, total_reads, 
-                                             log_multinomial_factors=log_multinomial_factors, retain_graph=False)    
+    grad_data = grad_loglikelihood_component(model, batches, total_reads, retain_graph=False)    
     
     n_param = len(list(model.named_parameters()))
     
