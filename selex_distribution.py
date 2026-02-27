@@ -3,6 +3,7 @@ from tree import Tree
 import sampling
 import energy_models
 import utils
+import math
     
 class MultiModeDistribution(torch.nn.Module):
     def __init__(
@@ -131,15 +132,46 @@ class MultiRoundDistribution(torch.nn.Module):
         fij = torch.stack(fij_tuple)
 
         return fi, fij
+
+    """
+    Compute the log-likelihood component for one set of moments (model or data)
+    """
+    def loglikelihood_component(self, x, total_reads, log_multinomial_factors=None, logZ=None):
+        
+        if log_multinomial_factors is None:
+            log_multinomial_factors = torch.zeros(len(x), dtype=x[0].dtype, device=x[0].device)
+        if logZ is None:
+            logZ = torch.zeros(len(x), dtype=x[0].dtype, device=x[0].device)
+        l = 0.0
+        for t in range(len(x)):
+            lt = - self.compute_energy_up_to_round(x[t], t).mean() - logZ[t]
+            l += log_multinomial_factors[t] + total_reads[t] * lt
+        normaliz = total_reads.sum()
+
+        return l / normaliz
+
+    def grad_loglikelihood_component(self, x, total_reads, 
+                                 log_multinomial_factors = None, 
+                                 retain_graph = False):
     
-def is_simple_indep_sites(model: MultiRoundDistribution):
-    if not isinstance(model.round_zero, energy_models.IndepSites):
-        return False
-    modes = model.selection.modes
-    if len(modes) > 1:
-        return False
-    for mode in modes:
-        if not isinstance(mode, energy_models.IndepSites):
-            return False
-            
-    return True
+        l = self.loglikelihood_component(x, total_reads, 
+                                    log_multinomial_factors=log_multinomial_factors)
+        
+        grad = torch.autograd.grad(
+            outputs=l,
+            inputs=tuple(self.parameters()),
+            retain_graph=retain_graph,
+            create_graph=False
+        )
+
+        return grad
+    
+    @torch.no_grad
+    def estimate_log_likelihood(self, x, total_reads, log_weights, log_multinomial_factors=None):
+        logZ = []
+        for t in range(len(x)):
+            _, L, q = x[t].size()
+            assert (log_weights[t].dim == 1, f"log_weights.size()")
+            logZ.append(L * math.log(q) - math.log(len(log_weights[t])) + (torch.logsumexp(log_weights[t], dim=0)).item())
+
+        return self.loglikelihood_component(x, total_reads, log_multinomial_factors=log_multinomial_factors, logZ = torch.tensor(logZ)).item()

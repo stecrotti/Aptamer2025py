@@ -4,9 +4,9 @@ import training
 import sampling
 import matplotlib.pyplot as plt
 
-def check_equilibration(model, data_loaders, total_reads, log_multinomial_factors=None,
-                        n_max_sweeps = 10**3, n_chains_equil = 10**3, 
-                        fi = None,
+def check_equilibration(model, data_loaders, total_reads,
+                        n_max_sweeps: int = 10**3, n_chains_equil:int = 10**3, 
+                        fi = None, log_multinomial_factors=None,
                         dtype=torch.float32, device=torch.device('cpu')):
     batches = [next(iter(dl)) for dl in data_loaders]
     if fi is None:
@@ -23,12 +23,13 @@ def check_equilibration(model, data_loaders, total_reads, log_multinomial_factor
     mixing_times_indep, fig_indep = sampling.compute_and_plot_mixing_time(
         model, chains_indep, n_max_sweeps, title="Mixing time - chains initialized uniformly")
     
+    print('\nSampling from the two sets of chains...')
     model.sample(chains_fi, n_sweeps=max(mixing_times_fi)*2)
     model.sample(chains_indep, n_sweeps=max(mixing_times_indep)*2)
 
     grad_data = training.grad_loglikelihood_component(model, batches, total_reads, log_multinomial_factors)
-    grad_model_fi =  training.grad_loglikelihood_component(model, chains_fi, total_reads, log_multinomial_factors)
-    grad_model_indep =  training.grad_loglikelihood_component(model, chains_indep, total_reads, log_multinomial_factors)
+    grad_model_fi = training.grad_loglikelihood_component(model, chains_fi, total_reads, log_multinomial_factors)
+    grad_model_indep = training.grad_loglikelihood_component(model, chains_indep, total_reads, log_multinomial_factors)
 
     n_param = len(list(model.named_parameters()))
 

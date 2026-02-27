@@ -477,7 +477,7 @@ class CheckpointCallback(Callback):
                             model=copy.deepcopy(model).to(cpu), optimizer=optimizer, log_weights=copy.deepcopy(log_weights).to(cpu))
 
 class ParamsCallback(Callback):
-    def __init__(self, save_every=torch.inf):
+    def __init__(self, save_every):
         super().__init__()
         self.save_every = save_every
         self.param_names = None
@@ -541,10 +541,10 @@ class ParamsCallback(Callback):
 
         return fig, ax
 
-    def plot_norm(self, figsize = (10,3), **kwargs):
+    def plot_norm(self, figsize = (4,3), **kwargs):
         n_params = len(self.param_names)
-
-        fig, ax = plt.subplots( **kwargs)
+        params = list(zip(*self.params))
+        fig, ax = plt.subplots(figsize=figsize, **kwargs)
         for i in range(n_params):
             norm = [torch.linalg.norm(p) for p in params[i]]
             ax.plot(self.epochs, norm, label=self.param_names[i])
