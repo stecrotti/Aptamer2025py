@@ -23,7 +23,7 @@ def train_tworound_potts(
     batch_size = 10**6,
     n_chains = None,
     weight_decay = 0.0,
-    lr = 1e-4,
+    lr = 1e-2,
     n_sweeps = 10,
     dtype = torch.float32,
     device = torch.device('cpu'),
@@ -62,7 +62,7 @@ def train_tworound_potts(
     chains = training.init_chains(n_rounds, n_chains, L, q, dtype=dtype, device=device)
     log_weights = torch.zeros(n_rounds, n_chains, dtype=dtype, device=device)
     
-    optimizer = torch.optim.AdamW([
+    optimizer = torch.optim.SGD([
         {'params': (model.round_zero.h), 'lr': 10*lr},
         {'params': (model.selection.modes[0].J,), 'weight_decay': weight_decay},
         {'params': (model.selection.modes[0].h,)}
