@@ -524,12 +524,12 @@ class ParamsCallback(Callback):
         fig.tight_layout()
         return fig, axes
     
-    def plot_diff(self, **kwargs):
+    def plot_diff(self, figsize=(4,3), **kwargs):
         n_steps = len(self.params)
         n_params = len(self.param_names)
         diff = list(zip(*[[torch.median(torch.abs(self.params[n][p] - self.params[n-1][p])).item() for p in range(n_params)] for n in range(n_steps)]))
 
-        fig, ax = plt.subplots( **kwargs)
+        fig, ax = plt.subplots(figsize=figsize, **kwargs)
         for i in range(n_params):
             ax.plot(self.epochs, diff[i], label=self.param_names[i])
             ax.set_xlabel('epoch')
@@ -541,10 +541,10 @@ class ParamsCallback(Callback):
 
         return fig, ax
 
-    def plot_norm(self, **kwargs):
+    def plot_norm(self, figsize=(4,3), **kwargs):
         n_params = len(self.param_names)
 
-        fig, ax = plt.subplots( **kwargs)
+        fig, ax = plt.subplots(figsize=figsize, **kwargs)
         for i in range(n_params):
             norm = torch.linalg.norm(self.params[i])
             ax.plot(self.epochs, norm, label=self.param_names[i])
@@ -581,9 +581,9 @@ class HammingDistanceCallback(Callback):
 
         return False
     
-    def plot(self, figsize=(4,3), **kwargs):
+    def plot(self, figsize=(4,3), cmap=plt.cm.viridis, **kwargs):
         delta = list(zip(*self.std_delta_logps_distances))
-        colors = plt.cm.viridis(torch.arange(0, 1, 1/len(delta)))
+        colors = cmap(torch.arange(0, 1, 1/len(delta)))
         fig, ax = plt.subplots(figsize=figsize, **kwargs)
         for (i, d) in enumerate(delta):
             if i in (0, len(delta)-1):
@@ -593,5 +593,6 @@ class HammingDistanceCallback(Callback):
 
         ax.set_xlabel('Epoch')
         ax.set_title('Mean square deviation from avg logps at hamming distance $d$')
+        ax.legend()
         
         return fig, ax
