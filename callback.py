@@ -327,8 +327,8 @@ class TeacherStudentCallback(Callback):
             Ns0_student = Ns0_student.set_zerosum_gauge()
         pearson_Ns0_round = []
         for (param_teacher, param_student) in zip(Ns0_teacher.parameters(), Ns0_student.parameters()):
-            x = param_teacher.detach().clone().cpu().reshape(-1)
-            y = param_student.detach().clone().cpu().reshape(-1)
+            x = param_teacher.detach().cpu().clone().reshape(-1)
+            y = param_student.detach().cpu().clone().reshape(-1)
             assert len(x) == len(y)
             if len(x) > 0:
                 p = compute_pearson(x, y)
@@ -345,8 +345,8 @@ class TeacherStudentCallback(Callback):
                 name_teacher, param_teacher = np_teacher
                 name_student, param_student = np_student
                 assert name_teacher == name_student
-                x = param_teacher.detach().clone().cpu()
-                y = param_student.detach().clone().cpu()
+                x = param_teacher.detach().cpu().clone()
+                y = param_student.detach().cpu().clone()
                 # if it's a Potts model, only consider the lower diagonal when computing pearson
                 if isinstance(mode_teacher, energy_models.Potts) and name_teacher.endswith('J'):
                     x = utils.off_diagonal_terms(x)
