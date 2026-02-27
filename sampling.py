@@ -147,7 +147,7 @@ def compute_mixing_time(
 
     return results
 
-def compute_and_plot_mixing_time(model, chains, n_max_sweeps = 10**3):
+def compute_and_plot_mixing_time(model, chains, n_max_sweeps = 10**3, title="Mixing time"):
     n_rounds, n_chains, L, q = chains.size()
     res = []
     for t in range(n_rounds):
@@ -174,7 +174,7 @@ def compute_and_plot_mixing_time(model, chains, n_max_sweeps = 10**3):
         ax.set_ylabel("Sequence Identity")
         ax.legend(loc='upper right')
         ax.set_title(f"Round {t}")
-        fig.suptitle("Mixing time")
+        fig.suptitle(title)
         
         # Add annotation for mixing time
         ax.annotate(r"$t^{\mathrm{mix}}=$" + f"{results['t_half'][-1]}", xy=(0.96, 0.7), xycoords='axes fraction', fontsize=15,

@@ -541,12 +541,12 @@ class ParamsCallback(Callback):
 
         return fig, ax
 
-    def plot_norm(self, figsize=(4,3), **kwargs):
+    def plot_norm(self, figsize = (10,3), **kwargs):
         n_params = len(self.param_names)
 
-        fig, ax = plt.subplots(figsize=figsize, **kwargs)
+        fig, ax = plt.subplots( **kwargs)
         for i in range(n_params):
-            norm = torch.linalg.norm(self.params[i])
+            norm = [torch.linalg.norm(p) for p in params[i]]
             ax.plot(self.epochs, norm, label=self.param_names[i])
             ax.set_xlabel('epoch')
             ax.set_ylabel('||param||')
