@@ -134,7 +134,8 @@ class MultiRoundDistribution(torch.nn.Module):
         return fi, fij
 
     """
-    Compute the log-likelihood component for one set of moments (model or data)
+    Compute the function whose gradient is one of the two moments (model or data)
+    x are the chains or batches in the two cases respectively
     """
     def loglikelihood_component(self, x, total_reads, log_multinomial_factors=None, logZ=None):
         

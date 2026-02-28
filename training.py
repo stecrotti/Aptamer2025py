@@ -162,8 +162,9 @@ def train(
                     if log_multinomial_factors_valid is None:
                         raise ValueError("Validation set was provided, but not the corresponding log-multinomial factors.")
                     batches_valid = [next(iter(dl)) for dl in data_loaders_valid]
-                    log_likelihood_valid = model.estimate_log_likelihood(batches_valid, total_reads_valid, log_weights,
-                                                                log_multinomial_factors_valid)
+                    log_likelihood_valid = model.estimate_log_likelihood(batches_valid, total_reads=total_reads_valid, 
+                                                                         log_weights=log_weights,
+                                                                         log_multinomial_factors=log_multinomial_factors_valid)
                 else:
                     log_likelihood_valid = None
 
@@ -171,7 +172,8 @@ def train(
                 for t in ts:
                     energy_new = model.compute_energy_up_to_round(chains[t], t)
                     log_weights[t] += energies_AIS[t] - energy_new
-                log_likelihood = model.estimate_log_likelihood(batches, total_reads, log_weights, log_multinomial_factors)
+                log_likelihood = model.estimate_log_likelihood(batches, total_reads=total_reads, log_weights=log_weights, 
+                                                               log_multinomial_factors=log_multinomial_factors)
 
                 epochs += 1
                 converged = (epochs > max_epochs)

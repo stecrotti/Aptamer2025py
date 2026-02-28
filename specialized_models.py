@@ -84,8 +84,6 @@ class IndepSitesMultiRoundDistribution(selex_distribution.MultiRoundDistribution
     @torch.no_grad
     def estimate_log_likelihood(self, batches, total_reads, 
                                 log_multinomial_factors=None, use_cached_fi = True, **kwargs):
-        if log_multinomial_factors is None:
-            log_multinomial_factors = torch.zeros(len(batches), dtype=batches[0].dtype, device=batches[0].device)
         if use_cached_fi:
             if self.fi is None:
                 raise ValueError('Expected to find cached single-site frequencies.')
@@ -93,6 +91,9 @@ class IndepSitesMultiRoundDistribution(selex_distribution.MultiRoundDistribution
         else:
             fi_list = [utils.get_freq_single_point(s) for s in batches]
             fi = torch.stack(fi_list)
+        
+        if log_multinomial_factors is None:
+            log_multinomial_factors = torch.zeros(len(fi), dtype=fi.dtype, device=fi.device)
 
         n_rounds = len(total_reads)
         normaliz = total_reads.sum()
