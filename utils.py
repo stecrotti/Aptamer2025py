@@ -144,16 +144,18 @@ def sequences_counts_from_files(experiment_id: str, round_ids, verbose=True):
     sequences = []
     sequences_unique = []
     counts = []
-    logmult = []
+    log_multinomial_factors = []
     for round_id in round_ids:
         s, su, c, l = sequences_counts_from_file(experiment_id, round_id)
         sequences.append(s)
         sequences_unique.append(su)
         counts.append(c)
-        logmult.append(l)
+        log_multinomial_factors.append(l)
         if verbose: print(f"Finished round {round_id}")
+
+    log_multinomial_factors = torch.tensor(log_multinomial_factors)
     
-    return sequences, sequences_unique, counts, torch.tensor(logmult)
+    return sequences, sequences_unique, counts, log_multinomial_factors
 
 def sequences_from_files_detailed(experiment_id: str, round_ids, verbose=True, return_enrichments=False):
     n_rounds = len(round_ids)

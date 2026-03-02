@@ -253,6 +253,7 @@ class PearsonCovarianceCallback(Callback):
         super().__init__()
         self.pearson_Ns0 = []
         self.pearson_ps = []
+        self.param_names = []
 
     def after_step(self, model, grad_model, grad_data, *args, **kwargs):
         offset = 0
@@ -261,6 +262,11 @@ class PearsonCovarianceCallback(Callback):
                 grad_data[1+offset], grad_data[0+offset]*2, grad_model[1+offset], grad_model[0+offset]*2)
             self.pearson_Ns0.append(pearson_Ns0)
         offset += len(list(model.round_zero.parameters()))
+
+        if model.learn_chemical_potentials:
+            offset += 1
+        if model.learn_selection_strength:
+            offset += 1
         
         pearson_ps_round = []
         for (mode) in model.selection.modes:
