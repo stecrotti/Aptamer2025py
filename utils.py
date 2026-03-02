@@ -224,10 +224,11 @@ def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):
 
 def sequences_uniques_counts_from_file_ab6(round_id: str, 
                             dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve()):
-    files = glob.glob(f"*_{round_id}_aa.txt", root_dir=dirpath)
+    dirpath = Path(dirpath).resolve()
+    files = glob.glob(f"*{round_id}_aa.txt", root_dir=dirpath)
     nf = len(files)
     if nf != 1:
-        raise ValueError(f"Expected round id {round_id} to match 1 file, got {nf} matches: {files}")
+        raise ValueError(f"Expected round id {round_id} to match 1 file in {dirpath}, got {nf} matches: {files}")
     filepath = files[0]
     sequences = []
     counts = []
@@ -242,14 +243,32 @@ def sequences_uniques_counts_from_file_ab6(round_id: str,
 
     sequences = encode_sequence(sequences, TOKENS_PROTEIN)
 
-    return sequences, counts
+    return torch.tensor(sequences), torch.tensor(counts)
+
+def sequences_from_file_ab6_detailed(round_id, dtype=torch.int32,
+                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve()):
+    sequences_unique, counts = sequences_uniques_counts_from_file_ab6(round_id, dirpath)
+    sequences_unique = sequences_unique.to(dtype=dtype)
+    counts = counts.to(dtype=dtype)
+    sequences = torch.repeat_interleave(sequences_unique, counts, dim=0)
+    log_multinomial_factors = log_multinomial(counts)
+
+    return sequences, sequences_unique, counts, log_multinomial_factors
+
+def sequences_from_files_ab6_detailed(round_ids, dtype=torch.int32,
+                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve()):
+    sequences, sequences_unique, counts, log_multinomial_factors = zip(*[sequences_from_file_ab6_detailed(round_id, dtype=dtype)
+                                                                    for round_id in round_ids])
+    sequences_unique_all, counts_unique = group_rounds(sequences, sequences_unique, counts)
+
+    return sequences, sequences_unique, counts, log_multinomial_factors, sequences_unique_all, counts_unique
 
 def sequences_from_file_ab6(round_id: str, dtype=torch.int32,
                             dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve(),
                             return_log_multinomial_factors=False):
     sequences_unique, counts = sequences_uniques_counts_from_file_ab6(round_id, dirpath)
-    sequences_unique = torch.tensor(sequences_unique, dtype=dtype)
-    counts = torch.tensor(counts, dtype=dtype)
+    sequences_unique = sequences_unique.to(dtype=dtype)
+    counts = counts.to(dtype=dtype)
     sequences = torch.repeat_interleave(sequences_unique, counts, dim=0)
 
     if return_log_multinomial_factors:

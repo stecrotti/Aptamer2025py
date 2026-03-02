@@ -470,11 +470,9 @@ class CheckpointCallback(Callback):
 
     def after_step(self, model, optimizer, log_weights, epochs, *args, **kwargs):
         self.total_epochs += 1
-        if epochs % self.save_every == 0:
-            cpu = torch.device('cpu')
-
+        if self.total_epochs % self.save_every == 0:
             save_checkpoint(self.checkpoint_filename, self.total_epochs,
-                            model=copy.deepcopy(model).to(cpu), optimizer=optimizer, log_weights=copy.deepcopy(log_weights).to(cpu))
+                            model=copy.deepcopy(model).cpu(), optimizer=optimizer, log_weights=copy.deepcopy(log_weights).cpu())
 
 class ParamsCallback(Callback):
     def __init__(self, save_every):
@@ -483,16 +481,15 @@ class ParamsCallback(Callback):
         self.param_names = None
         self.params = []
         self.epochs = []
-        self.last_epoch = 1 - self.save_every
+        self.total_epochs = 0
 
     def after_step(self, model, epochs, *args, **kwargs):
         if self.param_names is None:
             self.param_names = [n for (n, p) in model.named_parameters()]
-        if (epochs-1) % self.save_every == 0:
+        self.total_epochs += 1
+        if self.total_epochs % self.save_every == 0:
             self.params.append([p.detach().cpu().clone() for p in model.parameters()])
-            curr_epoch = self.last_epoch + self.save_every
-            self.epochs.append(curr_epoch)
-            self.last_epoch = curr_epoch
+            self.epochs.append(self.total_epochs)
         return False
     
     def plot(self, figsize=(10, 4), plot_every:int = 1, cmap=matplotlib.cm.viridis):

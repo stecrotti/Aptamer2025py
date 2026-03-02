@@ -253,7 +253,7 @@ def scatter_moments(model, data_loaders, chains, total_reads,
         ax.set_ylabel('Moments data')
         ax.set_title(param_name)
 
-    fig.suptitle('Moment matching (units on axes up to const factor)')
+    fig.suptitle('Moment matching')
     fig.tight_layout()
 
     return grad_model, grad_data, fig, axes

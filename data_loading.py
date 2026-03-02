@@ -99,7 +99,7 @@ def train_test_split_plot(counts_round, lims_high, lims_low, n_high, n_low):
     valid_idx_high = torch.arange(n_seq_unique)[valid_idx_high_bool].tolist()
     valid_idx_low = torch.arange(n_seq_unique)[valid_idx_low_bool].tolist()
     
-    print(f'Selected {n_low}/{nlow} unique sequences with low count and {n_high}/{nhigh} unique sequences with high count')
+    print(f'Selected {n_low}/{nlow} ({n_low/nlow*100:.1f}%) unique sequences with low count and ({n_high/nhigh*100:.1f}%) unique sequences with high count')
 
     idx_high = random.sample(valid_idx_high, n_high)
     idx_low = random.sample(valid_idx_low, n_low)

@@ -27,6 +27,7 @@ def train_tworound_potts(
     n_sweeps = 10,
     dtype = torch.float32,
     device = torch.device('cpu'),
+    optim = 'SGD',
     checkpoint_filename = None,
     checkpoint_every = 500,
     save_params_every = 100
@@ -61,8 +62,15 @@ def train_tworound_potts(
     data_loaders = [data_loading.SelexRoundDataLoader(seq_oh, batch_size=batch_size, device=device) for seq_oh in sequences_oh]
     chains = training.init_chains(n_rounds, n_chains, L, q, dtype=dtype, device=device)
     log_weights = torch.zeros(n_rounds, n_chains, dtype=dtype, device=device)
+
+    if optim == 'SGD':
+        opt = torch.optim.SGD
+    elif optim == 'AdamW':
+        opt = torch.optim.AdamW
+    else:
+        raise InputError(f'Optimizer: expected one of SGD, AdamW. Got {optim}')
     
-    optimizer = torch.optim.SGD([
+    optimizer = opt([
         {'params': (model.round_zero.h), 'lr': 10*lr},
         {'params': (model.selection.modes[0].J,), 'weight_decay': weight_decay},
         {'params': (model.selection.modes[0].h,)}
