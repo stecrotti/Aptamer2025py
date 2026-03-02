@@ -24,19 +24,24 @@ class MultiModeDistribution(torch.nn.Module):
             self,
             x: torch.Tensor, # batch_size * L * q
             selected: torch.BoolTensor, # n_rounds * n_modes
-            selection_strength: torch.Tensor = None
+            chemical_potential: torch.Tensor | None = None, # n_rounds * n_modes
+            selection_strength: torch.Tensor | None = None  # n_rounds
     ):
         if selection_strength is None:
             selection_strength = torch.ones(selected.size(0), dtype=x.dtype, device=x.device)
         minus_en_tuple = tuple(- mode.compute_energy(x) for mode in self.modes)
-        minus_en = torch.stack(minus_en_tuple, dim=1)
+        minus_en = torch.stack(minus_en_tuple, dim=1)  # (batch_size * n_modes)
+        logps_round_mode = minus_en.unsqueeze(1) + chemical_potential.unsqueeze(0) # (batch_size * n_rounds * n_modes)
         if self.normalized == True:
-            minus_en = minus_en - minus_en.logsumexp(dim=1, keepdim=True)
+            logps_round_mode = logps_round_mode - logps_round_mode.logsumexp(dim=2, keepdim=True)
         # pick only the selected rounds 
-        en_selected =  - torch.where(selected, minus_en.unsqueeze(1), torch.inf)
+        en_selected = - torch.where(selected, logps_round_mode, - torch.inf)    # (batch_size * n_rounds * n_modes)
+        # en_selected =  - torch.where(selected, minus_en.unsqueeze(1), torch.inf)  # (batch_size * n_rounds * n_modes)
+        # en_selected = en_selected - chemical_potential_selected
         # (log)sum(exp) over modes, then sum over rounds
-        en = en_selected.logsumexp(dim=-1)
-        return (en * selection_strength[None,:]).sum(1)
+        en_rounds = en_selected.logsumexp(dim=-1)   # (batch_size * n_rounds)
+        en = (en_rounds * selection_strength.unsqueeze(0)).sum(1)   # (batch_size)
+        return en
         
     
 class MultiRoundDistribution(torch.nn.Module):
@@ -45,13 +50,16 @@ class MultiRoundDistribution(torch.nn.Module):
         round_zero: energy_models.EnergyModel,
         selection: MultiModeDistribution = MultiModeDistribution(),
         tree: Tree = Tree(),
-        selected_modes: torch.BoolTensor = torch.empty(0, 0, dtype=bool),   # (n_rounds * n_modes) modes selected for at each round
+        selected_modes: torch.BoolTensor = torch.empty(0, 0, dtype=bool),   # (n_selection_rounds * n_modes) modes selected for at each round
+        chemical_potentials: torch.Tensor | None = None,              # (n_selection_rounds * n_modes) 
         selection_strength: torch.Tensor | None = None,
-        learn_selection_strength: bool = False,
+        learn_chemical_potentials: bool = True,
+        learn_selection_strength: bool | None = None,
         dtype = torch.float32
     ):
-        if selection.get_n_modes() != selected_modes.size(1):
-            raise ValueError(f"Number of modes must coincide for selection probability and selected modes, got {selection.get_n_modes()} and {selected_modes.size(1)}")
+        n_modes = selection.get_n_modes()
+        if n_modes != selected_modes.size(1):
+            raise ValueError(f"Number of modes must coincide for selection probability and selected modes, got {n_modes} and {selected_modes.size(1)}")
         n_selection_rounds = selected_modes.size(0)
         if tree.get_n_nodes() != n_selection_rounds:
             raise ValueError(f"Number of selection rounds must coincide for tree and selected modes, got {tree.get_n_nodes()} and {n_selection_rounds}")
@@ -60,6 +68,18 @@ class MultiRoundDistribution(torch.nn.Module):
         self.selection = selection
         self.tree = tree
         self.selected_modes = selected_modes
+        if learn_chemical_potentials is None:
+            learn_chemical_potentials = selection.normalized
+        if chemical_potentials is None:
+            chemical_potentials = torch.zeros((n_selection_rounds, n_modes), device=selected_modes.device, dtype=dtype)
+        elif chemical_potentials.size() != (n_selection_rounds, n_modes):
+            raise ValueError(f"Size of chemical potential matrix must be (n_selection_rounds * n_modes), i.e.f{(n_selection_rounds, n_modes)}, got {chemical_potentials.size()}")
+        if learn_chemical_potentials:
+            self.chemical_potentials = torch.nn.Parameter(chemical_potentials)
+        else:
+            self.chemical_potentials = chemical_potentials
+        self.learn_chemical_potentials = learn_chemical_potentials
+
         if selection_strength is None:
             selection_strength = torch.ones(n_selection_rounds, device=selected_modes.device, dtype=dtype)
         elif selection_strength.size(0) != n_selection_rounds:
@@ -77,6 +97,7 @@ class MultiRoundDistribution(torch.nn.Module):
         abs_selection_strength = torch.square(self.selection_strength)
         normalized_selection_strength = abs_selection_strength / abs_selection_strength.mean(0, keepdim=True)
         return self.selection.compute_energy(x, selected=self.selected_modes[t-1:t], 
+                                             chemical_potential=self.chemical_potentials[t-1:t],
                                              selection_strength=normalized_selection_strength[t-1:t])
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau}
@@ -86,6 +107,7 @@ class MultiRoundDistribution(torch.nn.Module):
         ancestors = self.tree.ancestors_of(t-1)
         normalized_selection_strength = self.selection_strength / self.selection_strength.mean(0, keepdim=True)
         return self.selection.compute_energy(x, selected=self.selected_modes[ancestors],
+                                             chemical_potential=self.chemical_potentials[ancestors],
                                              selection_strength=normalized_selection_strength[ancestors])
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau} + logNs0
@@ -102,6 +124,9 @@ class MultiRoundDistribution(torch.nn.Module):
     def get_n_selection_rounds(self):
         return self.tree.get_n_nodes()
     
+    def get_n_modes(self):
+        return self.selection.get_n_modes()
+    
     def _apply(self, fn):
         super()._apply(fn)
         
@@ -112,6 +137,8 @@ class MultiRoundDistribution(torch.nn.Module):
         self.selected_modes = fn(self.selected_modes)
         if not self.learn_selection_strength:
             self.selection_strength = fn(self.selection_strength)
+        if not self.learn_chemical_potentials:
+            self.chemical_potentials = fn(self.chemical_potentials)
         
         return self
 
