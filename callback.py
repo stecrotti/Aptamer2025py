@@ -217,7 +217,7 @@ class ConvergenceMetricsCallback(Callback):
         for (name, norm) in zip(names, zip(*self.grad_param_ratio)):
             ax.plot(norm, label=name)
         ax.legend()
-        ax.set_ylabel('$\\max |\\nabla p / p|$')
+        ax.set_ylabel('$\\max |\\nabla logL / p|$')
         ax.set_xlabel('iter')
         ax.set_title('Max abs gradient divided by parameter value')
         fig.tight_layout()
