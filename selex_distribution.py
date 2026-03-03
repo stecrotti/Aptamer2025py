@@ -9,11 +9,13 @@ class MultiModeDistribution(torch.nn.Module):
     def __init__(
         self,
         *modes,
-        normalized: bool = True
+        normalized: bool | None = None
     ):
         super().__init__()
         for mode in modes:
             assert isinstance(mode, energy_models.EnergyModel), f"Expected mode of type `EnergyModel`, got {type(mode)}"
+        if normalized is None:
+            normalized = len(modes) > 1
         self.modes = torch.nn.ModuleList(modes)
         self.normalized = normalized
 
@@ -29,6 +31,8 @@ class MultiModeDistribution(torch.nn.Module):
     ):
         if selection_strength is None:
             selection_strength = torch.ones(selected.size(0), dtype=x.dtype, device=x.device)
+        if chemical_potential is None:
+            chemical_potential = torch.zeros(selected.size(), dtype=x.dtype, device=x.device)
         minus_en_tuple = tuple(- mode.compute_energy(x) for mode in self.modes)
         minus_en = torch.stack(minus_en_tuple, dim=1)  # (batch_size * n_modes)
         logps_round_mode = minus_en.unsqueeze(1) + chemical_potential.unsqueeze(0) # (batch_size * n_rounds * n_modes)
@@ -50,7 +54,7 @@ class MultiRoundDistribution(torch.nn.Module):
         selected_modes: torch.BoolTensor = torch.empty(0, 0, dtype=bool),   # (n_selection_rounds * n_modes) modes selected for at each round
         chemical_potential: torch.Tensor | None = None,              # (n_selection_rounds * n_modes) 
         selection_strength: torch.Tensor | None = None,
-        learn_chemical_potentials: bool = True,
+        learn_chemical_potentials: bool | None = None,
         learn_selection_strength: bool | None = None,
         dtype = torch.float32
     ):
@@ -91,8 +95,7 @@ class MultiRoundDistribution(torch.nn.Module):
     def selection_energy_at_round(self, x, t):
         if t == 0:
             return torch.zeros(x.size(0))
-        abs_selection_strength = torch.square(self.selection_strength)
-        normalized_selection_strength = abs_selection_strength / abs_selection_strength.mean(0, keepdim=True)
+        normalized_selection_strength = self.selection_strength / self.selection_strength.mean(0, keepdim=True)
         return self.selection.compute_energy(x, selected=self.selected_modes[t-1:t], 
                                              chemical_potential=self.chemical_potential[t-1:t],
                                              selection_strength=normalized_selection_strength[t-1:t])
