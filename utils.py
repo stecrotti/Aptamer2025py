@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 import random
 import datetime
 
-TOKENS_PROTEIN = "*ACDEFGHIKLMNPQRSTVWY"
+TOKENS_PROTEIN = "ACDEFGHIKLMNPQRSTVWY"
+TOKENS_PROTEIN_GAP = "*ACDEFGHIKLMNPQRSTVWY"
 TOKENS_DNA = "ACGT"
 TOKENS_RNA = 'ACGU'
 
@@ -238,8 +239,9 @@ def sequences_uniques_counts_from_file_ab6(round_id: str,
             sequence = spl[0]
             count = spl[1]
             if len(sequence) == 6:
-                sequences.append(sequence)
-                counts.append(int(count))
+                if not '*' in sequence:
+                    sequences.append(sequence)
+                    counts.append(int(count))
 
     sequences = encode_sequence(sequences, TOKENS_PROTEIN)
 
@@ -249,7 +251,6 @@ def sequences_from_file_ab6_detailed(round_id, dtype=torch.int32,
                             dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve()):
     sequences_unique, counts = sequences_uniques_counts_from_file_ab6(round_id, dirpath)
     sequences_unique = sequences_unique.to(dtype=dtype)
-    counts = counts.to(dtype=dtype)
     sequences = torch.repeat_interleave(sequences_unique, counts, dim=0)
     log_multinomial_factors = log_multinomial(counts)
 
@@ -257,7 +258,7 @@ def sequences_from_file_ab6_detailed(round_id, dtype=torch.int32,
 
 def sequences_from_files_ab6_detailed(round_ids, dtype=torch.int32,
                             dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve()):
-    sequences, sequences_unique, counts, log_multinomial_factors = zip(*[sequences_from_file_ab6_detailed(round_id, dtype=dtype)
+    sequences, sequences_unique, counts, log_multinomial_factors = zip(*[sequences_from_file_ab6_detailed(round_id, dtype=dtype, dirpath=dirpath)
                                                                     for round_id in round_ids])
     sequences_unique_all, counts_unique = group_rounds(sequences, sequences_unique, counts)
 
@@ -713,7 +714,7 @@ def subsample_sequences(sequences_unique_all, counts_unique, idx,
     sequences = []
     log_multinomial_factors = []
     total_reads = []
-    q = sequences_unique_all.max().item() + 1
+    q = int(sequences_unique_all.max().item()) + 1
     
     for t in range(n_rounds):
         sequences.append(torch.repeat_interleave(sequences_unique_all[idx], counts_unique[t][idx], dim=0))
