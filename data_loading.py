@@ -42,14 +42,17 @@ class SelexRoundDataLoader:
 
     def get_batch(
         self,
+        batch_size = None,
         generator = None 
     ):
         if generator is None:
             generator = self.generator
+        if batch_size is None:
+            batch_size = self.batch_size
         nseq = self.seq_oh.shape[0]
         # generate random indices on the same device as data
         perm = torch.randperm(nseq, generator=generator).to(self.seq_oh.device)
-        idx = perm[:self.batch_size]
+        idx = perm[:batch_size]
         return self.seq_oh[idx].to(self.device)
     
     def __iter__(self):

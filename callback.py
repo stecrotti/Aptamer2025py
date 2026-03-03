@@ -307,7 +307,6 @@ class PearsonCovarianceCallback(Callback):
         
         return fig, axes
     
-    
 class TeacherStudentCallback(Callback):
     def __init__(self, model_teacher):
         super().__init__()
@@ -361,7 +360,10 @@ class TeacherStudentCallback(Callback):
         pearson_energy = []
         slope_energy = []
         for t in range(model.get_n_rounds()):
-            x = data_loaders[t].get_batch()
+            batch_size = data_loaders[t].batch_size
+            if batch_size <= 1:
+                batch_size = 10**4
+            x = data_loaders[t].get_batch(batch_size)
             en_teacher = self.model_teacher.compute_energy_up_to_round(x, t).detach().cpu()
             en_student = model.compute_energy_up_to_round(x, t).detach().cpu()
             p = compute_pearson(en_teacher, en_student)
