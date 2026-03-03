@@ -43,6 +43,9 @@ class IndepSitesMultiRoundDistribution(selex_distribution.MultiRoundDistribution
     def cache_site_frequencies(self, sequences_oh):
         fi_list = [utils.get_freq_single_point(s) for s in sequences_oh]
         self.fi = torch.stack(fi_list)
+
+    def needs_mcmc(self):
+        return False
     
     @torch.no_grad
     def grad_loglikelihood_model(self, chains, total_reads, **kwargs):

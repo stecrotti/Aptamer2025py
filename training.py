@@ -144,9 +144,10 @@ def train(
             optimizer.zero_grad()
 
             # update chains
-            for t in ts:
-                with torch.no_grad():
-                    energies_AIS[t] = update_chains(chains, t, model, n_sweeps)
+            if model.needs_mcmc():
+                for t in ts:
+                    with torch.no_grad():
+                        energies_AIS[t] = update_chains(chains, t, model, n_sweeps)
 
             # compute model moments
             grad_model = model.grad_loglikelihood_model(chains, total_reads, retain_graph=True)
@@ -169,9 +170,10 @@ def train(
                     log_likelihood_valid = None
 
                 # update logweights for importance sampling estimate of normalization constant
-                for t in ts:
-                    energy_new = model.compute_energy_up_to_round(chains[t], t)
-                    log_weights[t] += energies_AIS[t] - energy_new
+                if model.needs_mcmc():
+                    for t in ts:
+                        energy_new = model.compute_energy_up_to_round(chains[t], t)
+                        log_weights[t] += energies_AIS[t] - energy_new
                 log_likelihood = model.estimate_log_likelihood(batches, total_reads=total_reads, log_weights=log_weights, 
                                                                log_multinomial_factors=log_multinomial_factors)
 
@@ -226,8 +228,7 @@ def estimate_log_likelihood_AIS(model, batches, total_reads, log_multinomial_fac
     log_weights = compute_weights_AIS(model, batches, n_chains, n_sweeps, step)
     return model.estimate_log_likelihood(batches, total_reads, log_weights, log_multinomial_factors)
 
-def scatter_moments(model, data_loaders, chains, total_reads, 
-                    log_multinomial_factors=None, **kwargs):
+def scatter_moments(model, data_loaders, chains, total_reads, **kwargs):
     batches = [next(iter(dl)) for dl in data_loaders]    
 
     model.zero_grad()

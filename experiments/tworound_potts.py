@@ -63,22 +63,17 @@ def train_tworound_potts(
     chains = training.init_chains(n_rounds, n_chains, L, q, dtype=dtype, device=device)
     log_weights = torch.zeros(n_rounds, n_chains, dtype=dtype, device=device)
 
-    if optim == 'SGD':
-        opt = torch.optim.SGD
-    elif optim == 'AdamW':
-        opt = torch.optim.AdamW
-    else:
-        raise InputError(f'Optimizer: expected one of SGD, AdamW. Got {optim}')
+    opt = getattr(torch.optim, optim)
     
     optimizer = opt([
-        {'params': (model.round_zero.h), 'lr': 10*lr},
+        {'params': (model.round_zero.h, model.selection.modes[0].h)},
         {'params': (model.selection.modes[0].J,), 'weight_decay': weight_decay},
-        {'params': (model.selection.modes[0].h,)}
     ], lr=lr, weight_decay=0.0)
 
     callbacks = [callback.ConvergenceMetricsCallback(), callback.PearsonCovarianceCallback(), 
                  callback.CheckpointCallback(save_every=checkpoint_every, checkpoint_filename=checkpoint_filename, delete_old_checkpoints=True),
-                 callback.ParamsCallback(save_every=save_params_every)]
+                 callback.ParamsCallback(save_every=save_params_every),
+                 callback.GradientPersistenceCallback()]
 
     training.train(model=model, data_loaders=data_loaders, total_reads=total_reads,
                    chains=chains, n_sweeps=n_sweeps, max_epochs=max_epochs,

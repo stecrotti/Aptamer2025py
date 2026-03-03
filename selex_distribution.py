@@ -124,6 +124,9 @@ class MultiRoundDistribution(torch.nn.Module):
                 energies[t] = energy_t
         
         return energies
+
+    def needs_mcmc(self):
+        return True
     
     def estimate_marginals(self, chains, n_sweeps, beta=1.0):
         self.sample(chains, n_sweeps, beta=beta)
