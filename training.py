@@ -191,23 +191,13 @@ def train(
                                 target_pearson=target_pearson, thresh_slope=thresh_slope,
                                 optimizer=optimizer, log_weights=log_weights,
                                 log_multinomial_factors_valid=log_multinomial_factors_valid)
-                converged = converged or c
+                    converged = converged or c
                 
             if converged:
                 model.zero_grad()
                 return
 
     model.zero_grad()
-
-# @torch.no_grad
-# def estimate_log_likelihood(model, x, total_reads, log_weights, log_multinomial_factors=None):
-#     logZ = []
-#     for t in range(len(x)):
-#         _, L, q = x[t].size()
-#         assert (log_weights[t].dim == 1, f"log_weights.size()")
-#         logZ.append(L * math.log(q) - math.log(len(log_weights[t])) + (torch.logsumexp(log_weights[t], dim=0)).item())
-
-#     return loglikelihood_component(model, x, total_reads, log_multinomial_factors=log_multinomial_factors, logZ = torch.tensor(logZ)).item()
 
 @torch.no_grad
 def compute_weights_AIS(model, batches, n_chains, n_sweeps, step):
