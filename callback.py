@@ -593,3 +593,45 @@ class HammingDistanceCallback(Callback):
         ax.legend()
         
         return fig, ax
+
+class GradientPersistenceCallback(Callback):
+    def __init__(self):
+        super().__init__()
+
+    def before_training(self, model, **kwargs):
+        self.param_names = [n for (n,_) in model.named_parameters()]
+        self.grad_old = tuple(torch.zeros_like(p.detach().cpu()) for p in model.parameters())
+        self.diff = []
+
+    def after_step(self, grad_total, **kwargs):
+        grad = tuple(gr.cpu().clone() for gr in grad_total)
+        # self.grads.append(g)
+        diff = torch.tensor([torch.nn.functional.cosine_similarity(
+            grad[i].reshape(-1), self.grad_old[i].reshape(-1), dim=0).item() for i in range(len(self.param_names))])
+        self.diff.append(diff)
+        self.grad_old = grad
+
+        return False
+    
+    def plot(self, figsize=(4,3), window_size=100, **kwargs):
+        n_epochs = len(self.diff)
+        n_params = len(self.param_names)
+
+        diff = torch.stack(self.diff)
+        diff_avg = torch.stack([torch.tensor([diff[max(0, epoch-window_size):epoch+1,i].mean().item()
+            for i in range(n_params)])
+            for epoch in range(1, len(diff))])
+        diff_std = torch.stack([torch.tensor([diff[max(0, epoch-window_size):epoch+1,i].std().item()
+            for i in range(n_params)])
+            for epoch in range(1, len(diff))])
+        
+        fig, ax = plt.subplots(figsize=figsize, **kwargs)
+        for i in range(n_params):
+            ax.plot(range(n_epochs-1), diff_avg[:,i], label=self.param_names[i])
+            ax.fill_between(range(n_epochs-1), diff_avg[:,i]-diff_std[:,i], diff_avg[:,i]+diff_std[:,i], alpha=0.1)
+        ax.legend()
+        ax.set_xlabel('iter')
+        ax.set_ylabel(r'$\cos(\nabla \log L^{(it)}, \nabla \log L^{(it+1)})$')
+        ax.set_title('Smoothed gradient persistence')
+        
+        return fig, ax

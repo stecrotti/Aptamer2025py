@@ -80,16 +80,18 @@ def train_tworound_potts(
                  callback.CheckpointCallback(save_every=checkpoint_every, checkpoint_filename=checkpoint_filename, delete_old_checkpoints=True),
                  callback.ParamsCallback(save_every=save_params_every)]
 
-    training.train(model, data_loaders, total_reads, chains, n_sweeps, max_epochs,
-               optimizer=optimizer, callbacks=callbacks, log_weights=log_weights,
-               log_multinomial_factors=log_multinomial_factors)
+    training.train(model=model, data_loaders=data_loaders, total_reads=total_reads,
+                   chains=chains, n_sweeps=n_sweeps, max_epochs=max_epochs,
+                   optimizer=optimizer, callbacks=callbacks, log_weights=log_weights,
+                   log_multinomial_factors=log_multinomial_factors)
 
     return model, data_loaders, chains, optimizer, log_weights, callbacks
 
 def resume_training(model, data_loaders, chains, optimizer, log_weights, callbacks, 
                     max_epochs, total_reads, log_multinomial_factors, n_sweeps = 10):
     
-    training.train(model, data_loaders, total_reads, chains, n_sweeps, max_epochs,
+    training.train(model=model, data_loaders=data_loaders, total_reads=total_reads,
+                   chains=chains, n_sweeps=n_sweeps, max_epochs=max_epochs,
            optimizer=optimizer, callbacks=callbacks, log_weights=log_weights,
            log_multinomial_factors=log_multinomial_factors)
     

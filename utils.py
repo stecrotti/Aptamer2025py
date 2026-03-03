@@ -126,9 +126,9 @@ def sequences_unique_and_counts(sequences):
 
 def sequences_counts_from_file(*args, **kwargs):
     sequences = sequences_from_file(*args, **kwargs)
-    sequences_unique, counts, logmult = sequences_unique_and_counts(sequences)
+    sequences_unique, counts, log_multinomial_factors = sequences_unique_and_counts(sequences)
 
-    return sequences, sequences_unique, counts, logmult
+    return sequences, sequences_unique, counts, log_multinomial_factors
 
 def sequences_from_files(experiment_id: str, round_ids, verbose=True):
     sequences = []
