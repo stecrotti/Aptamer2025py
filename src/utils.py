@@ -109,7 +109,7 @@ def import_from_fasta(
 
 def sequences_from_file(experiment_id: str, round_id: str, 
                         device=torch.device("cpu")): 
-    dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()
+    dirpath = (Path(__file__) / "../../../Aptamer2025/data" / experiment_id).resolve()
     filepath = dirpath / (experiment_id + round_id + "_merged.fastq_result.fas.gz")
     tokens = TOKENS_DNA
     sequences = import_from_fasta(filepath, tokens=tokens)
@@ -205,7 +205,7 @@ def sequences_from_files_detailed(experiment_id: str, round_ids, verbose=True, r
         return sequences, sequences_unique, counts, log_multinomial_factors, sequences_unique_all, counts_unique
 
 def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):         
-    dirpath = (Path(__file__) / "../../Aptamer2025/data" / experiment_id).resolve()   
+    dirpath = (Path(__file__) / "../../../Aptamer2025/data" / experiment_id).resolve()   
     filepath = dirpath / (experiment_id + "_" + round_id + ".fasta")
     tokens = "ACGT"
     headers, sequences = import_from_fasta(filepath, tokens=tokens, filter_sequences=False, remove_duplicates=False)
@@ -226,7 +226,7 @@ def sequences_from_file_thrombin(experiment_id: str, round_id: str, device):
     return seq
 
 def sequences_uniques_counts_from_file_ab6(round_id: str, 
-                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve()):
+                            dirpath = (Path(__file__) / "../../../Aptamer2025/data/ab6/Txt files/").resolve()):
     dirpath = Path(dirpath).resolve()
     files = glob.glob(f"*{round_id}_aa.txt", root_dir=dirpath)
     nf = len(files)
@@ -250,7 +250,7 @@ def sequences_uniques_counts_from_file_ab6(round_id: str,
     return torch.tensor(sequences), torch.tensor(counts)
 
 def sequences_from_file_ab6_detailed(round_id, dtype=torch.int32,
-                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve()):
+                            dirpath = (Path(__file__) / "../../../Aptamer2025/data/ab6/Txt files/").resolve()):
     sequences_unique, counts = sequences_uniques_counts_from_file_ab6(round_id, dirpath)
     sequences_unique = sequences_unique.to(dtype=dtype)
     sequences = torch.repeat_interleave(sequences_unique, counts, dim=0)
@@ -259,7 +259,7 @@ def sequences_from_file_ab6_detailed(round_id, dtype=torch.int32,
     return sequences, sequences_unique, counts, log_multinomial_factors
 
 def sequences_from_files_ab6_detailed(round_ids, dtype=torch.int32,
-                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve()):
+                            dirpath = (Path(__file__) / "../../../Aptamer2025/data/ab6/Txt files/").resolve()):
     sequences, sequences_unique, counts, log_multinomial_factors = zip(*[sequences_from_file_ab6_detailed(round_id, dtype=dtype, dirpath=dirpath)
                                                                     for round_id in round_ids])
     sequences_unique_all, counts_unique = group_rounds(sequences, sequences_unique, counts)
@@ -267,7 +267,7 @@ def sequences_from_files_ab6_detailed(round_ids, dtype=torch.int32,
     return sequences, sequences_unique, counts, log_multinomial_factors, sequences_unique_all, counts_unique
 
 def sequences_from_file_ab6(round_id: str, dtype=torch.int32,
-                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve(),
+                            dirpath = (Path(__file__) / "../../../Aptamer2025/data/ab6/Txt files/").resolve(),
                             return_log_multinomial_factors=False):
     sequences_unique, counts = sequences_uniques_counts_from_file_ab6(round_id, dirpath)
     sequences_unique = sequences_unique.to(dtype=dtype)
@@ -281,7 +281,7 @@ def sequences_from_file_ab6(round_id: str, dtype=torch.int32,
         return sequences
     
 def sequences_from_files_ab6(round_ids, dtype=torch.int32,
-                            dirpath = (Path(__file__) / "../../Aptamer2025/data/ab6/Txt files/").resolve(),
+                            dirpath = (Path(__file__) / "../../../Aptamer2025/data/ab6/Txt files/").resolve(),
                             return_log_multinomial_factors=False):
     
     s, l = zip(*[sequences_from_file_ab6(round_id, dtype=dtype, dirpath=dirpath,

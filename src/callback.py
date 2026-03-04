@@ -26,7 +26,6 @@ class Callback:
     def after_step(self, *args, **kwargs):
         return False
 
-# TODO: save also some info about gradient persistance (e.g. cosine similarity t,t+1 over a window) and how parameters change
 class ConvergenceMetricsCallback(Callback):
     def __init__(self, progress_bar=True, progress_plot=False):
         super().__init__()
@@ -466,11 +465,11 @@ class CheckpointCallback(Callback):
         self.total_epochs = 0
 
         if delete_old_checkpoints:
-            dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}' 
+            dirpath = pathlib.Path(__file__).parent.parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}' 
             if dirpath.is_dir():
                 shutil.rmtree(dirpath, ignore_errors=True)
 
-        dirpath = pathlib.Path(__file__).parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}' 
+        dirpath = pathlib.Path(__file__).parent.parent.resolve() / f'experiments/checkpoints/{checkpoint_filename}' 
         pathlib.Path(dirpath).mkdir(parents=True, exist_ok=True)
 
     def before_training(self, *args, **kwargs):
