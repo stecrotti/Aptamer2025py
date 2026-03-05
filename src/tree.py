@@ -22,11 +22,8 @@ def store_ancestors(parent):
         ancestors.extend(path)
         cur_offset += len(path)
 
-    ancestors_flat = torch.tensor(ancestors, dtype=torch.long)
+    ancestors_flat = torch.tensor(ancestors)
     return ancestors_flat, offset, length
-
-def ancestors_of(v, ancestors_flat, offset, length):
-    return ancestors_flat[offset[v] : offset[v] + length[v]]
 
 
 class Tree:
@@ -47,6 +44,8 @@ class Tree:
 
     def ancestors_of(self, v):  # returns a torch vector with v and its ancestors
         assert(v < self.get_n_nodes()), f"Queried ancestors of node v={v}, but node indices are 0:{self.get_n_nodes()-1}"
+        if v < 0:
+            return torch.zeros(0, dtype=self.ancestors_flat.dtype)
         return self.ancestors_flat[self.offset[v] : self.offset[v] + self.length[v]]
 
     def get_n_nodes(self):   # excluding the root

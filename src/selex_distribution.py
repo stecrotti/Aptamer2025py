@@ -38,10 +38,11 @@ class MultiModeDistribution(torch.nn.Module):
         minus_en_tuple = tuple(- mode.compute_energy(x) for mode in self.modes)
         minus_en = torch.stack(minus_en_tuple, dim=1)  # (batch_size * n_modes)
         logps_modes = minus_en + chemical_potential
+        
         if self.normalized == True:
             logps_modes = logps_modes - logps_modes.logsumexp(dim=-1, keepdim=True)
         # pick only the selected_modes rounds by setting to inf the energy of non-selected ones
-        logps_selected = torch.where(selected_modes, logps_modes, torch.inf).logsumexp(-1)    # (batch_size)
+        logps_selected = torch.where(selected_modes, logps_modes, - torch.inf).logsumexp(-1)    # (batch_size)
         return - logps_selected
         
     
@@ -93,19 +94,21 @@ class MultiRoundDistribution(torch.nn.Module):
 
     # compute $\log p_{st}
     def selection_energy_at_round(self, x, t):
+        assert t < self.get_n_rounds()
         if t == 0:
             return torch.zeros(x.size(0), device=x.device)
-        en = self.selection.compute_energy(x, selected_modes=self.selected_modes[t], 
-                                            chemical_potential=self.chemical_potential[t])
-        en = en * self.selection_strength[t]
+        en = self.selection.compute_energy(x, selected_modes=self.selected_modes[t-1], 
+                                            chemical_potential=self.chemical_potential[t-1])
+        en = en * self.selection_strength[t-1]
         return en
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau}
     def selection_energy_up_to_round(self, x, t):
         en = torch.zeros(x.size(0), device=x.device)
+        # the +-1 jiggling is to concile round indices: round t is the (t-1)-th round of selection
         ancestors = self.tree.ancestors_of(t-1)
         for tau in ancestors:
-            en = en + self.selection_energy_at_round(x, tau)
+            en = en + self.selection_energy_at_round(x, tau+1)
         return en
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau} + logNs0
