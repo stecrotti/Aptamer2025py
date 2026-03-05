@@ -25,24 +25,24 @@ class MultiModeDistribution(torch.nn.Module):
     def compute_energy(
             self,
             x: torch.Tensor, # batch_size * L * q
-            selected: torch.BoolTensor, # n_rounds * n_modes
-            chemical_potential: torch.Tensor | None = None, # n_rounds * n_modes
-            selection_strength: torch.Tensor | None = None  # n_rounds
+            selected_modes: torch.BoolTensor, # n_modes
+            chemical_potential: torch.Tensor | None = None, # n_modes
     ):
-        if selection_strength is None:
-            selection_strength = torch.ones(selected.size(0), dtype=x.dtype, device=x.device)
         if chemical_potential is None:
-            chemical_potential = torch.zeros(selected.size(), dtype=x.dtype, device=x.device)
+            chemical_potential = torch.zeros(len(selected_modes), dtype=x.dtype, device=x.device)
+        
+        assert selected_modes.dim() == 1
+        assert chemical_potential.dim() == 1
+        assert len(selected_modes) == len(chemical_potential) == self.get_n_modes()
+
         minus_en_tuple = tuple(- mode.compute_energy(x) for mode in self.modes)
         minus_en = torch.stack(minus_en_tuple, dim=1)  # (batch_size * n_modes)
-        logps_round_mode = minus_en.unsqueeze(1) + chemical_potential.unsqueeze(0) # (batch_size * n_rounds * n_modes)
+        logps_modes = minus_en + chemical_potential
         if self.normalized == True:
-            logps_round_mode = logps_round_mode - logps_round_mode.logsumexp(dim=2, keepdim=True)
-        # pick only the selected rounds by setting to -inf the energy of non-selected ones
-        en_selected = - torch.where(selected, logps_round_mode, torch.inf)    # (batch_size * n_rounds * n_modes)
-        en_rounds = en_selected.logsumexp(dim=-1)   # (batch_size * n_rounds)
-        en = (en_rounds * selection_strength.unsqueeze(0)).sum(1)   # (batch_size)
-        return en
+            logps_modes = logps_modes - logps_modes.logsumexp(dim=-1, keepdim=True)
+        # pick only the selected_modes rounds by setting to inf the energy of non-selected ones
+        logps_selected = torch.where(selected_modes, logps_modes, torch.inf).logsumexp(-1)    # (batch_size)
+        return - logps_selected
         
     
 class MultiRoundDistribution(torch.nn.Module):
@@ -94,21 +94,19 @@ class MultiRoundDistribution(torch.nn.Module):
     # compute $\log p_{st}
     def selection_energy_at_round(self, x, t):
         if t == 0:
-            return torch.zeros(x.size(0))
-        normalized_selection_strength = self.selection_strength / self.selection_strength.mean(0, keepdim=True)
-        return self.selection.compute_energy(x, selected=self.selected_modes[t-1:t], 
-                                             chemical_potential=self.chemical_potential[t-1:t],
-                                             selection_strength=normalized_selection_strength[t-1:t])
+            return torch.zeros(x.size(0), device=x.device)
+        en = self.selection.compute_energy(x, selected_modes=self.selected_modes[t], 
+                                            chemical_potential=self.chemical_potential[t])
+        en = en * self.selection_strength[t]
+        return en
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau}
     def selection_energy_up_to_round(self, x, t):
-        if t == 0:
-            return torch.zeros(x.size(0), device=x.device)
+        en = torch.zeros(x.size(0), device=x.device)
         ancestors = self.tree.ancestors_of(t-1)
-        normalized_selection_strength = self.selection_strength / self.selection_strength.mean(0, keepdim=True)
-        return self.selection.compute_energy(x, selected=self.selected_modes[ancestors],
-                                             chemical_potential=self.chemical_potential[ancestors],
-                                             selection_strength=normalized_selection_strength[ancestors])
+        for tau in ancestors:
+            en = en + self.selection_energy_at_round(x, tau)
+        return en
 
     # compute $\sum_{\tau \in \mathcal A(t)} \log p_{s,\tau} + logNs0
     def compute_energy_up_to_round(self, x, t):
