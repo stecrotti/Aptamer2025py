@@ -546,8 +546,8 @@ class ParamsCallback(Callback):
         return fig, ax
 
     def plot_norm(self, figsize = (4,3), **kwargs):
-        n_params = len(self.param_names)
         params = list(zip(*self.params))
+        n_params = len(params)
         fig, ax = plt.subplots(figsize=figsize, **kwargs)
         for i in range(n_params):
             norm = [torch.linalg.norm(p) for p in params[i]]
