@@ -107,4 +107,3 @@ class IndepSitesMultiRoundDistribution(selex_distribution.MultiRoundDistribution
             ll += (log_multinomial_factors[t] + total_reads[t] * fi[t] * logpit).sum()
     
         return (ll / normaliz).item()
-
