@@ -165,7 +165,7 @@ class GenericEnergyModel(EnergyModel):
         batch_size, L, q = x.size()
         x_flat = x.view(-1, L * q)
 
-        return self.model(x_flat).squeeze()
+        return self.model(x_flat).squeeze(-1)
 
 class OverlapEnergy(EnergyModel):
     def __init__(
