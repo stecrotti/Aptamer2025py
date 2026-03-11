@@ -585,8 +585,8 @@ class HammingDistanceCallback(Callback):
         colors = cmap(torch.arange(0, 1, 1/len(delta)))
         fig, ax = plt.subplots(figsize=figsize, **kwargs)
         for (i, d) in enumerate(delta):
-            if i in (0, len(delta)-1):
-                ax.plot(d, color=colors[i], label=f'd={d}')
+            if i in range(0, len(delta), len(delta) // 8):
+                ax.plot(d, color=colors[i], label=f'd={i}')
             else:
                 ax.plot(d, color=colors[i])
 
