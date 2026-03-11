@@ -61,6 +61,10 @@ def one_hot(x: torch.Tensor, num_classes: int = -1, dtype: torch.dtype = torch.f
     """
     return _one_hot(x, num_classes, dtype)
 
+def decode(sequence, tokens):
+    out = [tokens[a] for a in sequence]
+    return ''.join(out)
+
 def log_factorial(x: int | torch.IntTensor):
     isscalar = isinstance(x, int)
     if isscalar:
@@ -146,6 +150,7 @@ def sequences_counts_from_files(experiment_id: str, round_ids, verbose=True):
     sequences_unique = []
     counts = []
     logmult = []
+    if verbose: print('Extracting sequences...')
     for round_id in round_ids:
         s, su, c, l = sequences_counts_from_file(experiment_id, round_id)
         sequences.append(s)
